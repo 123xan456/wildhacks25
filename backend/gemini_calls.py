@@ -3,11 +3,16 @@ import os
 from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_openai import ChatOpenAI
 import pandas as pd
+from dotenv import load_dotenv
+
+load_dotenv()
+
+MY_ENV_VAR = os.getenv("api_key")
+
 #%%
-gemini_api_key = ""
 def model_setup():
     if 'GOOGLE_API_KEY' not in os.environ:
-      os.environ['GOOGLE_API_KEY'] = gemini_api_key
+      os.environ['GOOGLE_API_KEY'] = MY_ENV_VAR
 
     print(os.environ['GOOGLE_API_KEY'])
     model = ChatGoogleGenerativeAI(
