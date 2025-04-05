@@ -171,25 +171,53 @@ const EnhancedStockApp = () => {
   };
 
   // Handle analysis for a specific stock
-  const analyzeStock = (stock) => {
+  const analyzeStock = async (stock) => {
     setSelectedStock(stock);
     setIsAnalyzing(true);
     
-    // Simulate analysis process (in a real app, this would call your backend)
-    setTimeout(() => {
+    try {
+      // Call your FastAPI backend
+      // CHANGE WITH API 
+      const response = await fetch('http://localhost:8000/api/data', {
+        method: 'POST', // Change to POST since you're sending data
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ stock: stock }) // Pass the stock as JSON in the request body
+      });
+      const data = await response.json();
+      
+      // Use the data from your backend in the analysis
+      setAnalysisResults({
+        stock,
+        externalFactors: data.externalFactors || ['Quarterly earnings report', 'New product launch', 'Industry regulation changes'],
+        sentiment: data.sentiment || 'positive',
+        prediction: data.prediction || 'Upward trend expected',
+        articles: data.articles || [
+          { title: 'Company Exceeds Quarterly Expectations', source: 'Financial Times', sentiment: 'Positive', summary: "Article Summary" },
+          { title: 'New Product Line Announced', source: 'Tech Insider', sentiment: 'Positive', summary: "Article Summary" },
+          { title: 'Market Analysis Shows Potential Risks', source: 'Market Watch', sentiment: 'Neutral', summary: "Article Summary" }
+        ],
+        summary: data.summary || "Based on recent performance and market trends, this stock shows positive indicators for growth in the coming period. Analyst sentiment is generally favorable."
+      });
+    } catch (error) {
+      console.error("Error fetching data:", error);
+      // Fallback to default data if API fails
       setAnalysisResults({
         stock,
         externalFactors: ['Quarterly earnings report', 'New product launch', 'Industry regulation changes'],
         sentiment: 'positive',
         prediction: 'Upward trend expected',
         articles: [
-          { title: 'Company Exceeds Quarterly Expectations', source: 'Financial Times', sentiment: 'Positive' },
-          { title: 'New Product Line Announced', source: 'Tech Insider', sentiment: 'Positive' },
-          { title: 'Market Analysis Shows Potential Risks', source: 'Market Watch', sentiment: 'Neutral' }
-        ]
+          { title: 'Company Exceeds Quarterly Expectations', source: 'Financial Times', sentiment: 'Positive', summary: "Article Summary" },
+          { title: 'New Product Line Announced', source: 'Tech Insider', sentiment: 'Positive', summary: "Article Summary" },
+          { title: 'Market Analysis Shows Potential Risks', source: 'Market Watch', sentiment: 'Neutral', summary: "Article Summary" }
+        ],
+        summary: "Based on recent performance and market trends, this stock shows positive indicators for growth in the coming period. Analyst sentiment is generally favorable."
       });
+    } finally {
       setIsAnalyzing(false);
-    }, 2000);
+    }
   };
 
   // Reset form to start again
@@ -375,7 +403,6 @@ const EnhancedStockApp = () => {
                     className="analyze-button"
                     onClick={() => {
                       setActiveTab('analysis');
-                      
                       analyzeStock(stock);
                     }}
                   >
@@ -592,14 +619,14 @@ const EnhancedStockApp = () => {
                     <div className="article-title">{article.title}</div>
                     <div className="article-source">{article.source}</div>
                     <div className="article-sentiment">{article.sentiment}</div>
+                    <div className="article-summary">{article.summary}</div>
                   </div>
                 ))}
               </div>
             </div>
             
             <div className="prediction-summary">
-              <h4>Summary</h4>
-              <p>Based on news analysis and market indicators, we predict an {analysisResults.sentiment} movement for {selectedStock}.</p>
+              {analysisResults.summary}
             </div>
             
             <div className="analysis-actions">
