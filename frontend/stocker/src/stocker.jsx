@@ -24,6 +24,7 @@ const EnhancedStockApp = () => {
   
   // Portfolio and analysis states
   const [portfolio, setPortfolio] = useState([]);
+  const [showPortfolioForm, setShowPortfolioForm] = useState(false);
   const [analysisResults, setAnalysisResults] = useState({});
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [selectedStock, setSelectedStock] = useState(null);
@@ -166,7 +167,16 @@ const EnhancedStockApp = () => {
   const handlePortfolioSubmit = () => {
     // Update portfolio with selected stocks
     setPortfolio(formData.stocks);
-    // Reset to portfolio view
+    // Hide portfolio form
+    setShowPortfolioForm(false);
+    // Reset to step 1 for next time
+    setStep(1);
+  };
+
+  // Edit portfolio - show the portfolio form with current stocks
+  const editPortfolio = () => {
+    setFormData({...formData, stocks: portfolio});
+    setShowPortfolioForm(true);
     setStep(1);
   };
 
@@ -234,6 +244,7 @@ const EnhancedStockApp = () => {
     setAccountCreated(false);
     setAnalysisResults({});
     setSelectedStock(null);
+    setShowPortfolioForm(false);
   };
 
   // Render error message component
@@ -391,7 +402,7 @@ const EnhancedStockApp = () => {
       <div className="portfolio-container">
         <h2 className="section-title">Your Stock Portfolio</h2>
         
-        {portfolio.length > 0 ? (
+        {portfolio.length > 0 && !showPortfolioForm ? (
           <>
             <div className="stocks-list">
               {portfolio.map(stock => (
@@ -415,10 +426,7 @@ const EnhancedStockApp = () => {
             
             <button
               type="button"
-              onClick={() => {
-                setFormData({...formData, stocks: portfolio});
-                setStep(1);
-              }}
+              onClick={editPortfolio}
               className="primary-button"
               style={{ marginTop: '1rem' }}
             >
@@ -438,7 +446,11 @@ const EnhancedStockApp = () => {
       <div className="portfolio-form">
         {step === 1 && (
           <>
-            <p className="form-description">Select stocks to add to your portfolio for analysis and predictions.</p>
+            <p className="form-description">
+              {portfolio.length > 0 ? 
+                "Edit your portfolio by adding or removing stocks:" : 
+                "Select stocks to add to your portfolio for analysis and predictions:"}
+            </p>
             
             <div className="form-field">
               <label className="field-label">Popular Stocks</label>
@@ -525,25 +537,46 @@ const EnhancedStockApp = () => {
         )}
 
         <div className="button-container">
-          {step > 1 ? (
-            <button
-              type="button"
-              onClick={prevStep}
-              className="secondary-button"
-            >
-              Back
-            </button>
+          {portfolio.length > 0 && showPortfolioForm ? (
+            <>
+              <button
+                type="button"
+                onClick={() => setShowPortfolioForm(false)}
+                className="secondary-button"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={nextStep}
+                className="primary-button"
+              >
+                {step < 2 ? 'Next' : 'Save Portfolio'}
+              </button>
+            </>
           ) : (
-            <div></div>
+            <>
+              {step > 1 ? (
+                <button
+                  type="button"
+                  onClick={prevStep}
+                  className="secondary-button"
+                >
+                  Back
+                </button>
+              ) : (
+                <div></div>
+              )}
+              
+              <button
+                type="button"
+                onClick={nextStep}
+                className="primary-button"
+              >
+                {step < 2 ? 'Next' : 'Save Portfolio'}
+              </button>
+            </>
           )}
-          
-          <button
-            type="button"
-            onClick={nextStep}
-            className="primary-button"
-          >
-            {step < 2 ? 'Next' : 'Save Portfolio'}
-          </button>
         </div>
       </div>
     );
