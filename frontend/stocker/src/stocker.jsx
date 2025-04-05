@@ -1,12 +1,15 @@
 import React, { useState } from 'react';
 import { AlertCircle, CheckCircle, Eye, EyeOff, TrendingUp, FileText, Search, Briefcase } from 'lucide-react';
 import './stocker.css';
+import ApiService from './ApiService';
 
 const EnhancedStockApp = () => {
   // Authentication states
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [authMode, setAuthMode] = useState('signin'); // 'signin' or 'signup'
   const [showPassword, setShowPassword] = useState(false);
+  const [currentUser, setCurrentUser] = useState(null); // Store current user info
+  const [isLoading, setIsLoading] = useState(false); // Loading state for API calls
   
   // Main app states
   const [activeTab, setActiveTab] = useState('portfolio');
@@ -106,20 +109,56 @@ const EnhancedStockApp = () => {
   };
 
   // Handle authentication (sign in or sign up)
-  const handleAuthentication = () => {
+  const handleAuthentication = async () => {
     if (validateAuthForm()) {
-      if (authMode === 'signup') {
-        // For demo purposes, just show success and authenticate
-        setAccountCreated(true);
-        setTimeout(() => {
-          setIsAuthenticated(true);
-          setPortfolio(formData.stocks);
-        }, 2000);
-      } else {
-        // For demo purposes, simulate successful login
-        setIsAuthenticated(true);
-        // Set some demo portfolio data
-        setPortfolio(['AAPL', 'MSFT', 'GOOGL']);
+      setIsLoading(true);
+      try {
+        if (authMode === 'signup') {
+          // Sign up with API
+          const result = await ApiService.signup(formData.username, formData.password);
+          
+          if (result.success) {
+            setAccountCreated(true);
+            // Store user information
+            setCurrentUser({
+              username: formData.username,
+              stocks: [],
+              frequency: 'daily'
+            });
+            
+            // Simulate the account created effect before redirection
+            setTimeout(() => {
+              setIsAuthenticated(true);
+              setPortfolio([]);
+            }, 2000);
+          } else {
+            setErrors({ username: result.message || 'Error creating account' });
+          }
+        } else {
+          // Sign in with API
+          const result = await ApiService.signin(formData.username, formData.password);
+          
+          if (result.success) {
+            // Set user info
+            setCurrentUser(result.user);
+            
+            // Update portfolio and frequency
+            setPortfolio(result.user.stocks || []);
+            setFormData(prev => ({
+              ...prev,
+              frequency: result.user.frequency || 'daily'
+            }));
+            
+            setIsAuthenticated(true);
+          } else {
+            setErrors({ password: result.message || 'Invalid login' });
+          }
+        }
+      } catch (error) {
+        console.error("Authentication error:", error);
+        setErrors({ password: 'Error connecting to server' });
+      } finally {
+        setIsLoading(false);
       }
     }
   };
@@ -128,6 +167,7 @@ const EnhancedStockApp = () => {
   const handleSignOut = () => {
     setIsAuthenticated(false);
     setAuthMode('signin');
+    setCurrentUser(null);
     resetForm();
   };
 
@@ -164,18 +204,58 @@ const EnhancedStockApp = () => {
   };
 
   // Handle portfolio form submission
-  const handlePortfolioSubmit = () => {
-    // Update portfolio with selected stocks
-    setPortfolio(formData.stocks);
-    // Hide portfolio form
-    setShowPortfolioForm(false);
-    // Reset to step 1 for next time
-    setStep(1);
+  const handlePortfolioSubmit = async () => {
+    if (!currentUser || !currentUser.username) return;
+    
+    setIsLoading(true);
+    try {
+      // Save stocks to MongoDB
+      const stocksResult = await ApiService.updateStocks(
+        currentUser.username,
+        formData.stocks
+      );
+      
+      // Save frequency preferences to MongoDB
+      const frequencyResult = await ApiService.updateFrequency(
+        currentUser.username,
+        formData.frequency
+      );
+      
+      if (stocksResult.success && frequencyResult.success) {
+        // Update local portfolio state
+        setPortfolio(formData.stocks);
+        
+        // Update the current user data
+        setCurrentUser({
+          ...currentUser,
+          stocks: formData.stocks,
+          frequency: formData.frequency
+        });
+        
+        // Hide portfolio form
+        setShowPortfolioForm(false);
+        // Reset to step 1 for next time
+        setStep(1);
+      } else {
+        console.error("Error saving portfolio:", stocksResult, frequencyResult);
+      }
+    } catch (error) {
+      console.error("Error saving portfolio:", error);
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   // Edit portfolio - show the portfolio form with current stocks
   const editPortfolio = () => {
-    setFormData({...formData, stocks: portfolio});
+    // Use the current user's stocks if available
+    const stocks = currentUser && currentUser.stocks ? currentUser.stocks : portfolio;
+    
+    setFormData({
+      ...formData, 
+      stocks: stocks,
+      frequency: currentUser?.frequency || 'daily'
+    });
     setShowPortfolioForm(true);
     setStep(1);
   };
@@ -287,6 +367,7 @@ const EnhancedStockApp = () => {
             onChange={handleChange}
             className={`text-input ${errors.username ? 'error' : ''}`}
             placeholder="Enter your username"
+            disabled={isLoading}
           />
           <ErrorMessage message={errors.username} />
         </div>
@@ -301,11 +382,13 @@ const EnhancedStockApp = () => {
               onChange={handleChange}
               className={`text-input ${errors.password ? 'error' : ''}`}
               placeholder="Enter your password"
+              disabled={isLoading}
             />
             <button 
               type="button" 
               onClick={() => setShowPassword(!showPassword)}
               className="password-toggle"
+              disabled={isLoading}
             >
               {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
             </button>
@@ -323,6 +406,7 @@ const EnhancedStockApp = () => {
               onChange={handleChange}
               className={`text-input ${errors.confirmPassword ? 'error' : ''}`}
               placeholder="Confirm your password"
+              disabled={isLoading}
             />
             <ErrorMessage message={errors.confirmPassword} />
           </div>
@@ -333,8 +417,9 @@ const EnhancedStockApp = () => {
           onClick={handleAuthentication}
           className="primary-button full-width"
           style={{ marginBottom: '1rem' }}
+          disabled={isLoading}
         >
-          {authMode === 'signin' ? 'Sign In' : 'Create Account'}
+          {isLoading ? 'Processing...' : (authMode === 'signin' ? 'Sign In' : 'Create Account')}
         </button>
         
         <div className="auth-switch">
@@ -345,6 +430,7 @@ const EnhancedStockApp = () => {
             type="button" 
             onClick={toggleAuthMode}
             className="text-button"
+            disabled={isLoading}
           >
             {authMode === 'signin' ? 'Sign Up' : 'Sign In'}
           </button>
@@ -360,7 +446,7 @@ const EnhancedStockApp = () => {
         <div className="app-header">
           <h1 className="app-title">Stock Prediction Dashboard</h1>
           <div className="user-section">
-            <span className="username">{formData.username}</span>
+            <span className="username">{currentUser?.username || formData.username}</span>
             <button 
               type="button" 
               onClick={handleSignOut}
@@ -398,6 +484,7 @@ const EnhancedStockApp = () => {
 
   // Portfolio management tab
   const renderPortfolioTab = () => {
+    // Use the same rendering logic but with potentially updated data
     return (
       <div className="portfolio-container">
         <h2 className="section-title">Your Stock Portfolio</h2>
@@ -543,6 +630,7 @@ const EnhancedStockApp = () => {
                 type="button"
                 onClick={() => setShowPortfolioForm(false)}
                 className="secondary-button"
+                disabled={isLoading}
               >
                 Cancel
               </button>
@@ -550,8 +638,9 @@ const EnhancedStockApp = () => {
                 type="button"
                 onClick={nextStep}
                 className="primary-button"
+                disabled={isLoading}
               >
-                {step < 2 ? 'Next' : 'Save Portfolio'}
+                {isLoading ? 'Saving...' : (step < 2 ? 'Next' : 'Save Portfolio')}
               </button>
             </>
           ) : (
@@ -561,6 +650,7 @@ const EnhancedStockApp = () => {
                   type="button"
                   onClick={prevStep}
                   className="secondary-button"
+                  disabled={isLoading}
                 >
                   Back
                 </button>
@@ -572,8 +662,9 @@ const EnhancedStockApp = () => {
                 type="button"
                 onClick={nextStep}
                 className="primary-button"
+                disabled={isLoading}
               >
-                {step < 2 ? 'Next' : 'Save Portfolio'}
+                {isLoading ? 'Saving...' : (step < 2 ? 'Next' : 'Save Portfolio')}
               </button>
             </>
           )}

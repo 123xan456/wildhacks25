@@ -1,10 +1,8 @@
-import React, { useState, useEffect } from 'react';
-
 // Base URL for API calls
 const API_BASE_URL = 'http://localhost:8000/api';
 
 // API Service object
-export const ApiService = {
+const ApiService = {
   // Test API connection
   testConnection: async () => {
     try {
@@ -96,29 +94,4 @@ export const ApiService = {
   }
 };
 
-// Demo component to test API connection
-const FlaskInteraction = () => {
-  const [message, setMessage] = useState('');
-  const [loading, setLoading] = useState(false);
-
-  // Test the connection to the Flask backend
-  useEffect(() => {
-    ApiService.testConnection()
-      .then(data => {
-        setMessage(data.message);
-      })
-      .catch(error => {
-        setMessage('Error connecting to Flask backend. Make sure it is running!');
-        console.error('Error:', error);
-      });
-  }, []);
-
-  return (
-    <div className="flask-interaction">
-      <h2>Flask API Interaction</h2>
-      <p>Backend Status: {message || 'Connecting...'}</p>
-    </div>
-  );
-};
-
-export default FlaskInteraction; 
+export default ApiService; 
