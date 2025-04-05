@@ -4,7 +4,7 @@ from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_openai import ChatOpenAI
 import pandas as pd
 #%%
-gemini_api_key = "AIzaSyAtllq2cvGyrKkIQ43gJmVamDLPzxyTL_k"
+gemini_api_key = ""
 def model_setup():
     if 'GOOGLE_API_KEY' not in os.environ:
       os.environ['GOOGLE_API_KEY'] = gemini_api_key
