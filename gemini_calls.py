@@ -37,8 +37,10 @@ def first_prompt(stock):
 
                             Now it's your turn. give me 50 key words, and ONLY the key words. Example: {stock}
                             """)
+    out = response.split(',')
+    out.append(stock)
 
-    return response.split(',')
+    return out
 #%%
 
 def individual_prediction(information, stock):
