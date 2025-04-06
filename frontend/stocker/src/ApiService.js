@@ -3,11 +3,9 @@ const API_BASE_URL = 'http://localhost:8000/api';
 
 // Polygon API configuration 
 const POLYGON_API_BASE_URL = 'https://api.polygon.io';
-const POLYGON_API_KEY = 'MFsJ1WFJwpgpR9BXzJ24byShrdlVdp6a'; // Only use when demo: Ipp3SKTtHg0TIEIRDUShlcm5tUNnyQKL
+const POLYGON_API_KEY = 'Ipp3SKTtHg0TIEIRDUShlcm5tUNnyQKL'; // Only use when demo: Ipp3SKTtHg0TIEIRDUShlcm5tUNnyQKL
 
-// API Service object
 const ApiService = {
-  // Test API connection
   testConnection: async () => {
     try {
       const response = await fetch(`${API_BASE_URL}/test`);
@@ -18,7 +16,6 @@ const ApiService = {
     }
   },
 
-  // User signup
   signup: async (username, password) => {
     try {
       const response = await fetch(`${API_BASE_URL}/signup`, {
@@ -35,7 +32,6 @@ const ApiService = {
     }
   },
 
-  // User signin
   signin: async (username, password) => {
     try {
       const response = await fetch(`${API_BASE_URL}/signin`, {
@@ -52,7 +48,6 @@ const ApiService = {
     }
   },
 
-  // Update user's selected stocks
   updateStocks: async (username, stocks) => {
     try {
       const response = await fetch(`${API_BASE_URL}/update_stocks`, {
@@ -69,7 +64,6 @@ const ApiService = {
     }
   },
 
-  // Update user's frequency preference
   updateFrequency: async (username, frequency) => {
     try {
       const response = await fetch(`${API_BASE_URL}/update_frequency`, {
@@ -86,7 +80,6 @@ const ApiService = {
     }
   },
 
-  // Get user data
   getUserData: async (username) => {
     try {
       const response = await fetch(`${API_BASE_URL}/user_data?username=${username}`);
@@ -97,7 +90,6 @@ const ApiService = {
     }
   },
 
-  // Verify if a stock symbol exists using Polygon API
   verifyStockSymbol: async (symbol) => {
     try {
       const response = await fetch(`${POLYGON_API_BASE_URL}/v3/reference/tickers/${symbol}?apiKey=${POLYGON_API_KEY}`);
@@ -118,7 +110,6 @@ const ApiService = {
     }
   },
 
-  // Get historical stock data for a specific timeframe
   getHistoricalData: async (symbol, from, to, timespan = 'day') => {
     try {
       // Format: YYYY-MM-DD
@@ -138,7 +129,6 @@ const ApiService = {
     }
   },
 
-  // Get stock details and latest price
   getStockDetails: async (symbol) => {
     try {
       const response = await fetch(
@@ -157,7 +147,6 @@ const ApiService = {
     }
   },
 
-  // Save analysis results to MongoDB
   saveAnalysisResults: async (username, symbol, analysisResults) => {
     try {
       const response = await fetch(`${API_BASE_URL}/saveAnalysis`, {
@@ -183,7 +172,6 @@ const ApiService = {
     }
   },
   
-  // Get saved analysis results from MongoDB
   getAnalysisResults: async (username, symbol) => {
     try {
       const response = await fetch(`${API_BASE_URL}/getAnalysis?username=${username}&symbol=${symbol}`);
@@ -195,7 +183,6 @@ const ApiService = {
     }
   },
 
-  // Update username
   updateUsername: async (currentUsername, newUsername, password) => {
     try {
       const response = await fetch(`${API_BASE_URL}/update_username`, {
@@ -218,7 +205,6 @@ const ApiService = {
     }
   },
   
-  // Update password
   updatePassword: async (username, currentPassword, newPassword) => {
     try {
       const response = await fetch(`${API_BASE_URL}/update_password`, {
