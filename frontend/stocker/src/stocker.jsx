@@ -26,7 +26,7 @@ const EnhancedStockApp = () => {
     stocks: [], // Will store simple stock symbols during selection
     fullNameStocks: {}, // Will map symbol to full name for later use
     customStock: '',
-    frequency: 'daily'
+    frequency: 'every_5_minutes'
   });
   const [errors, setErrors] = useState({});
   const [accountCreated, setAccountCreated] = useState(false);
@@ -443,9 +443,8 @@ const EnhancedStockApp = () => {
   };
 
   // Handle analysis for a specific stock
-  const analyzeStock = async (stockSymbol) => {
+  const analyzeStock = async (stockSymbol, skipAnalysis = false) => {
     setSelectedStock(stockSymbol);
-    setIsAnalyzing(true);
     setHistoricalData([]); // Clear previous data
     
     // Find the stock details from portfolio if available
@@ -498,6 +497,47 @@ const EnhancedStockApp = () => {
     try {
       // Fetch historical data for the stock
       await fetchHistoricalData(stockSymbol, chartTimeframe);
+      
+      // Check if we have saved analysis results first
+      if (currentUser && currentUser.username) {
+        try {
+          const savedResults = await ApiService.getAnalysisResults(currentUser.username, stockSymbol);
+          
+          if (savedResults.success && savedResults.analysis) {
+            // Use the saved results
+            setAnalysisResults({
+              ...savedResults.analysis,
+              stock: stockSymbol,
+              isAnalyzed: true,
+              isSavedResult: true
+            });
+            
+            // If not explicitly requesting new analysis, return with saved results
+            if (skipAnalysis) {
+              return;
+            }
+          }
+        } catch (savedResultsError) {
+          console.error("Error fetching saved analysis:", savedResultsError);
+        }
+      }
+      
+      // If skip analysis is requested and we didn't find saved results
+      if (skipAnalysis) {
+        // Set empty analysis results
+        setAnalysisResults({
+          stock: stockSymbol,
+          sourceGroups: [],
+          sentiment: null,
+          summary: null,
+          isAnalyzed: false,
+          lastUpdated: null
+        });
+        return;
+      }
+      
+      // Otherwise, proceed with analysis
+      setIsAnalyzing(true);
       
       const response = await fetch('http://localhost:8000/api/predict', {
         method: 'POST',
@@ -579,8 +619,8 @@ const EnhancedStockApp = () => {
             summary: sourceData.summary
           }));
         
-        // Use the data from your backend in the analysis
-        setAnalysisResults({
+        // Create the analysis results with timestamp
+        const analysisResults = {
           stock: stockSymbol,
           sourceGroups: sourcesWithArticles.length > 0 ? sourcesWithArticles : [
             { 
@@ -591,11 +631,29 @@ const EnhancedStockApp = () => {
             }
           ],
           sentiment: data.results.final_prediction?.[1] || 'Neutral',
-          summary: data.results.final_prediction?.[0] || "No prediction data available"
-        });
+          summary: data.results.final_prediction?.[0] || "No prediction data available",
+          lastUpdated: new Date().toISOString(),
+          isAnalyzed: true
+        };
+        
+        // Save the results to MongoDB if user is logged in
+        if (currentUser && currentUser.username) {
+          try {
+            await ApiService.saveAnalysisResults(
+              currentUser.username,
+              stockSymbol,
+              analysisResults
+            );
+          } catch (saveError) {
+            console.error("Error saving analysis results:", saveError);
+          }
+        }
+        
+        // Update the state with results
+        setAnalysisResults(analysisResults);
       } else {
         // Handle unexpected data structure
-        setAnalysisResults({
+        const errorResults = {
           stock: stockSymbol,
           sourceGroups: [{ 
             source: 'All news sources', 
@@ -604,13 +662,30 @@ const EnhancedStockApp = () => {
             summary: "No articles available for analysis" 
           }],
           sentiment: 'Neutral',
-          summary: "No prediction data available from the server"
-        });
+          summary: "No prediction data available from the server",
+          lastUpdated: new Date().toISOString(),
+          isAnalyzed: true
+        };
+        
+        // Save error results too so we don't keep trying to fetch
+        if (currentUser && currentUser.username) {
+          try {
+            await ApiService.saveAnalysisResults(
+              currentUser.username,
+              stockSymbol,
+              errorResults
+            );
+          } catch (saveError) {
+            console.error("Error saving analysis results:", saveError);
+          }
+        }
+        
+        setAnalysisResults(errorResults);
       }
     } catch (error) {
       console.error("Error fetching data:", error);
       // Fallback to default data if API fails
-      setAnalysisResults({
+      const fallbackResults = {
         stock: stockSymbol,
         sentiment: 'Neutral',
         sourceGroups: [{ 
@@ -619,8 +694,25 @@ const EnhancedStockApp = () => {
           articles: [{ title: 'No relevant articles found' }],
           summary: "No articles available for analysis" 
         }],
-        summary: "No prediction available due to service unavailability."
-      });
+        summary: "No prediction available due to service unavailability.",
+        lastUpdated: new Date().toISOString(),
+        isAnalyzed: true
+      };
+      
+      // Save fallback results too
+      if (currentUser && currentUser.username) {
+        try {
+          await ApiService.saveAnalysisResults(
+            currentUser.username,
+            stockSymbol,
+            fallbackResults
+          );
+        } catch (saveError) {
+          console.error("Error saving fallback results:", saveError);
+        }
+      }
+      
+      setAnalysisResults(fallbackResults);
     } finally {
       setIsAnalyzing(false);
     }
@@ -688,7 +780,7 @@ const EnhancedStockApp = () => {
       stocks: [],
       fullNameStocks: {},
       customStock: '',
-      frequency: 'daily'
+      frequency: 'every_5_minutes'
     });
     setStep(1);
     setAccountCreated(false);
@@ -902,7 +994,7 @@ const EnhancedStockApp = () => {
                       className="analyze-button"
                       onClick={() => {
                         setActiveTab('analysis');
-                        analyzeStock(symbol);
+                        analyzeStock(symbol, true); // Set to true to skip immediate analysis
                       }}
                     >
                       <TrendingUp size={16} />
@@ -1123,7 +1215,7 @@ const EnhancedStockApp = () => {
                     <button
                       key={symbol}
                       className="stock-button analysis-stock-button"
-                      onClick={() => analyzeStock(symbol)}
+                      onClick={() => analyzeStock(symbol, true)}
                     >
                       <span className="stock-button-symbol">{symbol}</span>
                       {displayName !== symbol && displayName.includes(' | ') && (
@@ -1159,12 +1251,14 @@ const EnhancedStockApp = () => {
                   <span className="company-name"> | {stockDetails.name}</span>
                 )}
               </h3>
-              {console.log("Sentiment value:", analysisResults.sentiment, "Type:", typeof analysisResults.sentiment)}
-              <div className={`prediction-badge ${analysisResults.sentiment === 'negative' ? 'negative' : analysisResults.sentiment === 'positive' ? 'positive' : 'neutral'}`}>
-                {analysisResults.sentiment === 'positive' ? 'Upward Trend Expected' : 
-                 analysisResults.sentiment === 'negative' ? 'Downward Trend Expected' : 
-                 'Neutral Outlook'}
-              </div>
+              {analysisResults.isAnalyzed && console.log("Sentiment value:", analysisResults.sentiment, "Type:", typeof analysisResults.sentiment)}
+              {analysisResults.isAnalyzed && (
+                <div className={`prediction-badge ${analysisResults.sentiment === 'negative' ? 'negative' : analysisResults.sentiment === 'positive' ? 'positive' : 'neutral'}`}>
+                  {analysisResults.sentiment === 'positive' ? 'Upward Trend Expected' : 
+                   analysisResults.sentiment === 'negative' ? 'Downward Trend Expected' : 
+                   'Neutral Outlook'}
+                </div>
+              )}
             </div>
             
             {/* Historical Stock Chart */}
@@ -1248,48 +1342,77 @@ const EnhancedStockApp = () => {
                 )}
               </div>
             </div>
-                        
-            <div className="analysis-section">
-              <h4 className="section-subtitle">
-                <FileText size={16} />
-                News Article Analysis
-              </h4>
-              <div className="articles-list">
-                {analysisResults.sourceGroups?.map((sourceGroup, index) => (
-                  <div key={index} className={`article-item ${sourceGroup.sentiment?.toLowerCase()}`}>
-                    <div className="article-source-name">{sourceGroup.source}</div>
-                    <div className="article-sentiment">{sourceGroup.sentiment}</div>
-                    <div className="article-summary">{sourceGroup.summary}</div>
-                    <div className="article-links">
-                      {sourceGroup.articles.map((article, articleIndex) => (
-                        <div key={articleIndex} className="article-link">
-                          <a href="#" onClick={(e) => { e.preventDefault(); }}>{article.title}</a>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
             
-            <div className="prediction-summary">
-              <h4 className="section-subtitle">
-                <TrendingUp size={16} />
-                Prediction Summary
-              </h4>
-              <p>{analysisResults.summary}</p>
-            </div>
+            {/* Analysis Section */}
+            {analysisResults.isAnalyzed ? (
+              <>
+                {analysisResults.lastUpdated && (
+                  <div className="last-updated-info">
+                    Last updated: {new Date(analysisResults.lastUpdated).toLocaleString()}
+                  </div>
+                )}
+                
+                <div className="analysis-section">
+                  <h4 className="section-subtitle">
+                    <FileText size={16} />
+                    News Article Analysis
+                  </h4>
+                  <div className="articles-list">
+                    {analysisResults.sourceGroups?.map((sourceGroup, index) => (
+                      <div key={index} className={`article-item ${sourceGroup.sentiment?.toLowerCase()}`}>
+                        <div className="article-source-name">{sourceGroup.source}</div>
+                        <div className="article-sentiment">{sourceGroup.sentiment}</div>
+                        <div className="article-summary">{sourceGroup.summary}</div>
+                        <div className="article-links">
+                          {sourceGroup.articles.map((article, articleIndex) => (
+                            <div key={articleIndex} className="article-link">
+                              <a href="#" onClick={(e) => { e.preventDefault(); }}>{article.title}</a>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+                
+                <div className="prediction-summary">
+                  <h4 className="section-subtitle">
+                    <TrendingUp size={16} />
+                    Prediction Summary
+                  </h4>
+                  <p>{analysisResults.summary}</p>
+                </div>
+              </>
+            ) : (
+              <div className="generate-analysis-container">
+                <p>Stock selected. Click the button below to generate analysis.</p>
+                <button 
+                  className="primary-button generate-analysis-button"
+                  onClick={() => analyzeStock(selectedStock)}
+                >
+                  Generate Analysis
+                </button>
+              </div>
+            )}
             
             <div className="analysis-actions">
+              {analysisResults.isAnalyzed && (
+                <button
+                  className="primary-button"
+                  onClick={() => analyzeStock(selectedStock)}
+                >
+                  Refresh Analysis
+                </button>
+              )}
               <button
-                className="secondary-button"
+                className="secondary-button select-another-button"
                 onClick={() => {
                   setSelectedStock(null);
                   setAnalysisResults({});
                   setHistoricalData([]);
                 }}
               >
-                Analyze Another Stock
+                Select Another Stock
               </button>
             </div>
           </div>

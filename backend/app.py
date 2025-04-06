@@ -7,6 +7,7 @@ from dotenv import load_dotenv
 import json
 from bson import json_util
 from gemini_calls import scrape_formatting, model_setup
+from datetime import datetime
 # Load environment variables
 load_dotenv()
 
@@ -22,8 +23,19 @@ db = client.stockerdb  # Database name
 def test_route():
     return jsonify({"message": "Flask backend is working!"})
 
-@app.route('/api/signup', methods=['POST'])
+# Handle OPTIONS requests for CORS
+def handle_options():
+    response = jsonify({})
+    response.headers.add('Access-Control-Allow-Origin', '*')
+    response.headers.add('Access-Control-Allow-Headers', 'Content-Type,Authorization')
+    response.headers.add('Access-Control-Allow-Methods', 'GET,PUT,POST,DELETE,OPTIONS')
+    return response
+
+@app.route('/api/signup', methods=['POST', 'OPTIONS'])
 def signup():
+    if request.method == 'OPTIONS':
+        return handle_options()
+        
     data = request.json
     print(f"Signup request: {json.dumps(data, indent=2)}")
     
@@ -36,7 +48,7 @@ def signup():
         "username": data['username'],
         "password": generate_password_hash(data['password']),
         "stocks": [],
-        "frequency": "daily"  # Default frequency
+        "frequency": "every_5_minutes"  # Default frequency changed from daily
     }
     
     db.users.insert_one(user)
@@ -44,8 +56,11 @@ def signup():
     
     return jsonify({"success": True, "message": "User created successfully"})
 
-@app.route('/api/signin', methods=['POST'])
+@app.route('/api/signin', methods=['POST', 'OPTIONS'])
 def signin():
+    if request.method == 'OPTIONS':
+        return handle_options()
+        
     data = request.json
     print(f"Signin request: {json.dumps(data, indent=2)}")
     
@@ -60,14 +75,17 @@ def signin():
     user_data = {
         "username": user['username'],
         "stocks": user.get('stocks', []),
-        "frequency": user.get('frequency', 'daily') 
+        "frequency": user.get('frequency', 'every_5_minutes') 
     }
     
     print(f"User logged in: {user_data['username']}")
     return jsonify({"success": True, "message": "Login successful", "user": user_data})
 
-@app.route('/api/update_stocks', methods=['POST'])
+@app.route('/api/update_stocks', methods=['POST', 'OPTIONS'])
 def update_stocks():
+    if request.method == 'OPTIONS':
+        return handle_options()
+        
     data = request.json
     print(f"Update stocks request: {json.dumps(data, indent=2)}")
     
@@ -96,8 +114,11 @@ def update_stocks():
         print(f"No changes made to stocks for user: {data['username']}")
         return jsonify({"success": True, "message": "No changes were made"})
 
-@app.route('/api/update_frequency', methods=['POST'])
+@app.route('/api/update_frequency', methods=['POST', 'OPTIONS'])
 def update_frequency():
+    if request.method == 'OPTIONS':
+        return handle_options()
+        
     data = request.json
     print(f"Update frequency request: {json.dumps(data, indent=2)}")
     
@@ -126,8 +147,11 @@ def update_frequency():
         print(f"No changes made to frequency for user: {data['username']}")
         return jsonify({"success": True, "message": "No changes were made"})
 
-@app.route('/api/user_data', methods=['GET'])
+@app.route('/api/user_data', methods=['GET', 'OPTIONS'])
 def get_user_data():
+    if request.method == 'OPTIONS':
+        return handle_options()
+        
     username = request.args.get('username')
     
     if not username:
@@ -143,13 +167,16 @@ def get_user_data():
     user_data = {
         "username": user['username'],
         "stocks": user.get('stocks', []),
-        "frequency": user.get('frequency', 'daily')
+        "frequency": user.get('frequency', 'every_5_minutes')
     }
     
     return jsonify({"success": True, "user": user_data})
 
-@app.route('/api/predict', methods=['POST'])
+@app.route('/api/predict', methods=['POST', 'OPTIONS'])
 def individual_prediction():
+    if request.method == 'OPTIONS':
+        return handle_options()
+        
     model = model_setup()
     
     data = request.json
@@ -165,13 +192,13 @@ def individual_prediction():
                               Here are step by step examples of how to generate the prediction based on each source of information:
                               Example 1:
                               Article 1: Information: ​In the 2024 U.S. presidential election, former President Donald Trump defeated Vice President Kamala Harris, securing 312 electoral votes to Harris's 226. Trump also won the popular vote with 49.8% against Harris's 48.3%. This victory marked Trump's return to the White House for a non-consecutive second term. ​
-                              Article 2: BYD has opened a $490 million EV factory in Thailand and is building a $1 billion plant in Indonesia, set to finish by end of 2025. Each factory will produce 150,000 vehicles annually, supporting BYD’s plan to double overseas sales to over 800,000 units by 2025.
-                              Prediction: Trump’s return could boost U.S. manufacturing and deregulation, potentially favoring Tesla. However, BYD’s aggressive global expansion may intensify EV competition. Combined, Tesla’s stock may face short-term optimism from policy shifts but long-term pressure from rising international rivals like BYD, possibly resulting in increased volatility and mixed investor sentiment.
+                              Article 2: BYD has opened a $490 million EV factory in Thailand and is building a $1 billion plant in Indonesia, set to finish by end of 2025. Each factory will produce 150,000 vehicles annually, supporting BYD's plan to double overseas sales to over 800,000 units by 2025.
+                              Prediction: Trump's return could boost U.S. manufacturing and deregulation, potentially favoring Tesla. However, BYD's aggressive global expansion may intensify EV competition. Combined, Tesla's stock may face short-term optimism from policy shifts but long-term pressure from rising international rivals like BYD, possibly resulting in increased volatility and mixed investor sentiment.
 
                               Example 2:
                               Article 1: In the second quarter of fiscal 2025, NVIDIA reported record revenue of $30.0 billion, a 122% year-over-year increase, surpassing analyst expectations. Earnings per share reached $0.67, up 168% from the previous year. This growth was driven by strong demand for AI-related products, particularly in data centers. ​
                               Article 2: President Trump, since his January 2025 inauguration, has implemented a range of new tariffs, although specific details fall after my October 2024 knowledge cutoff. Prior to leaving office in 2021, Trump was known for aggressive tariff policies, particularly targeting China, steel, aluminum, and various European goods. ​
-                              Prediction: NVIDIA’s record-breaking Q2 performance, driven by AI demand, suggests strong upward momentum. However, Trump’s new tariffs could disrupt global supply chains and raise costs, especially if China is targeted. Despite potential trade tensions, NVIDIA’s dominance in AI may sustain investor confidence, keeping its stock resilient with possible short-term fluctuations.                            
+                              Prediction: NVIDIA's record-breaking Q2 performance, driven by AI demand, suggests strong upward momentum. However, Trump's new tariffs could disrupt global supply chains and raise costs, especially if China is targeted. Despite potential trade tensions, NVIDIA's dominance in AI may sustain investor confidence, keeping its stock resilient with possible short-term fluctuations.                            
 
                               Now it's your turn. Given the information, write a 50-word prediction as to how that might affect {stock_symbol} in the short term.
                               {prompt}"""
@@ -202,6 +229,81 @@ def debug_user(username):
     if not user:
         return jsonify({"error": "User not found"}), 404
     return json.loads(json_util.dumps(user))
+
+@app.route('/api/saveAnalysis', methods=['POST', 'OPTIONS'])
+def save_analysis():
+    if request.method == 'OPTIONS':
+        return handle_options()
+    
+    data = request.json
+    username = data.get('username')
+    symbol = data.get('symbol')
+    analysis_results = data.get('analysisResults')
+    
+    if not username or not symbol or not analysis_results:
+        return jsonify({"success": False, "message": "Missing required fields"})
+    
+    try:
+        # Check if user exists
+        user = db.users.find_one({"username": username})
+        if not user:
+            return jsonify({"success": False, "message": "User not found"})
+        
+        # Create analyses collection if it doesn't exist
+        if "analyses" not in db.list_collection_names():
+            db.create_collection("analyses")
+        
+        # Upsert analysis document
+        db.analyses.update_one(
+            {"username": username, "symbol": symbol},
+            {"$set": {
+                "username": username,
+                "symbol": symbol,
+                "analysisResults": analysis_results,
+                "lastUpdated": datetime.now()
+            }},
+            upsert=True
+        )
+        
+        return jsonify({"success": True, "message": "Analysis saved successfully"})
+    
+    except Exception as e:
+        print(f"Error saving analysis: {e}")
+        return jsonify({"success": False, "message": str(e)})
+
+@app.route('/api/getAnalysis', methods=['GET', 'OPTIONS'])
+def get_analysis():
+    if request.method == 'OPTIONS':
+        return handle_options()
+    
+    username = request.args.get('username')
+    symbol = request.args.get('symbol')
+    
+    if not username or not symbol:
+        return jsonify({"success": False, "message": "Missing required fields"})
+    
+    try:
+        # Find the analysis document
+        analysis = db.analyses.find_one({"username": username, "symbol": symbol})
+        
+        if analysis:
+            # Convert ObjectId to string for JSON serialization
+            analysis['_id'] = str(analysis['_id'])
+            # Convert datetime to ISO format string
+            if isinstance(analysis.get('lastUpdated'), datetime):
+                analysis['lastUpdated'] = analysis['lastUpdated'].isoformat()
+            
+            return jsonify({
+                "success": True, 
+                "analysis": analysis.get('analysisResults'),
+                "lastUpdated": analysis.get('lastUpdated')
+            })
+        else:
+            return jsonify({"success": False, "message": "Analysis not found"})
+    
+    except Exception as e:
+        print(f"Error retrieving analysis: {e}")
+        return jsonify({"success": False, "message": str(e)})
 
 if __name__ == '__main__':
     app.run(debug=True, port=8000) 

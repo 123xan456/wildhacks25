@@ -155,6 +155,44 @@ const ApiService = {
       console.error('Stock details error:', error);
       throw error;
     }
+  },
+
+  // Save analysis results to MongoDB
+  saveAnalysisResults: async (username, symbol, analysisResults) => {
+    try {
+      const response = await fetch(`${API_BASE_URL}/saveAnalysis`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          username,
+          symbol,
+          analysisResults: {
+            ...analysisResults,
+            lastUpdated: new Date().toISOString()
+          }
+        })
+      });
+      
+      const data = await response.json();
+      return data;
+    } catch (error) {
+      console.error('Error saving analysis results:', error);
+      return { success: false, message: 'Error connecting to server' };
+    }
+  },
+  
+  // Get saved analysis results from MongoDB
+  getAnalysisResults: async (username, symbol) => {
+    try {
+      const response = await fetch(`${API_BASE_URL}/getAnalysis?username=${username}&symbol=${symbol}`);
+      const data = await response.json();
+      return data;
+    } catch (error) {
+      console.error('Error fetching analysis results:', error);
+      return { success: false, message: 'Error connecting to server' };
+    }
   }
 };
 
