@@ -5,33 +5,32 @@ import ApiService from './ApiService';
 import { Line } from 'react-chartjs-2';
 import { Chart as ChartJS, CategoryScale, LinearScale, PointElement, LineElement, Title, Tooltip, Legend } from 'chart.js';
 
-// Register Chart.js components
 ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, Title, Tooltip, Legend);
 
 const EnhancedStockApp = () => {
   // Authentication states
   const [isAuthenticated, setIsAuthenticated] = useState(false);
-  const [authMode, setAuthMode] = useState('signin'); // 'signin' or 'signup'
+  const [authMode, setAuthMode] = useState('signin');
   const [showPassword, setShowPassword] = useState(false);
-  const [currentUser, setCurrentUser] = useState(null); // Store current user info
-  const [isLoading, setIsLoading] = useState(false); // Loading state for API calls
+  const [currentUser, setCurrentUser] = useState(null); // store current user info
+  const [isLoading, setIsLoading] = useState(false); // loading state for API calls
   
-  // Main app states
+  // main app states
   const [activeTab, setActiveTab] = useState('portfolio');
   const [step, setStep] = useState(1);
   const [formData, setFormData] = useState({
     username: '',
     password: '',
     confirmPassword: '',
-    stocks: [], // Will store simple stock symbols during selection
-    fullNameStocks: {}, // Will map symbol to full name for later use
+    stocks: [], // store simple stock symbols during selection
+    fullNameStocks: {}, // map symbol to full name for later use
     customStock: '',
     frequency: 'every_5_minutes'
   });
   const [errors, setErrors] = useState({});
   const [accountCreated, setAccountCreated] = useState(false);
   
-  // Settings modal states
+  // settings modal states
   const [showSettings, setShowSettings] = useState(false);
   const [settingsTab, setSettingsTab] = useState('profile');
   const [settingsForm, setSettingsForm] = useState({
@@ -43,13 +42,13 @@ const EnhancedStockApp = () => {
   const [settingsErrors, setSettingsErrors] = useState({});
   const [settingsSuccess, setSettingsSuccess] = useState(null);
   
-  // Portfolio and analysis states
+  // portfolio and analysis states
   const [portfolio, setPortfolio] = useState([]);
   const [showPortfolioForm, setShowPortfolioForm] = useState(false);
   const [analysisResults, setAnalysisResults] = useState({});
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [selectedStock, setSelectedStock] = useState(null);
-  const [portfolioDetails, setPortfolioDetails] = useState({}); // Store details for all portfolio stocks
+  const [portfolioDetails, setPortfolioDetails] = useState({}); 
   
   // Stock verification and historical data states
   const [isVerifyingStock, setIsVerifyingStock] = useState(false);
@@ -57,15 +56,13 @@ const EnhancedStockApp = () => {
   const [historicalData, setHistoricalData] = useState([]);
   const [chartTimeframe, setChartTimeframe] = useState('1W'); // 1W, 1M, 6M, 1Y
   const [isLoadingChart, setIsLoadingChart] = useState(false);
-  const [stockDetails, setStockDetails] = useState(null); // Store company name and other details
+  const [stockDetails, setStockDetails] = useState(null); 
 
-  // Popular stocks for quick selection
   const popularStocks = [
     'AAPL', 'MSFT', 'GOOGL', 'AMZN', 'META', 
     'TSLA', 'NVDA', 'JPM', 'V', 'WMT'
   ];
 
-  // Frequency options
   const frequencyOptions = [
     'every_5_minutes',
     'every_30_minutes',
@@ -74,7 +71,6 @@ const EnhancedStockApp = () => {
     'weekly'
   ];
   
-  // Display names for frequency options
   const frequencyDisplayNames = {
     'every_5_minutes': 'Every 5 Minutes',
     'every_30_minutes': 'Every 30 Minutes',
@@ -83,18 +79,15 @@ const EnhancedStockApp = () => {
     'weekly': 'Weekly'
   };
 
-  // Use an effect to load stock details when portfolio changes
   useEffect(() => {
     if (portfolio.length > 0 && isAuthenticated) {
       fetchPortfolioDetails(portfolio);
     }
-  }, [isAuthenticated]); // Only run when authentication state changes
+  }, [isAuthenticated]); 
 
-  // Auto-update effect based on user preferences
   useEffect(() => {
     if (!isAuthenticated || !currentUser || !currentUser.frequency) return;
     
-    // Convert frequency to milliseconds
     const frequencyToMs = {
       'every_5_minutes': 5 * 60 * 1000,
       'every_30_minutes': 30 * 60 * 1000,
@@ -103,25 +96,23 @@ const EnhancedStockApp = () => {
       'weekly': 7 * 24 * 60 * 60 * 1000
     };
     
-    const interval = frequencyToMs[currentUser.frequency] || 5 * 60 * 1000; // Default to 5 minutes
+    const interval = frequencyToMs[currentUser.frequency] || 5 * 60 * 1000; 
     
     console.log(`Setting up auto-update interval: ${interval}ms (${currentUser.frequency})`);
     
-    // Check for updates every minute
+    // check for updates every minute
     const checkInterval = setInterval(async () => {
       if (!currentUser || !currentUser.username) return;
       
       console.log("Checking for analyses that need updates...");
       
-      // Get all user's stocks
       const userStocks = portfolio.map(item => 
         typeof item === 'string' ? item : item.symbol
       );
       
-      // For each stock, check if analysis exists and needs update
+      // for each stock, check if analysis exists and needs update
       for (const stockSymbol of userStocks) {
         try {
-          // Get the saved analysis
           const savedResults = await ApiService.getAnalysisResults(currentUser.username, stockSymbol);
           
           if (savedResults.success && savedResults.analysis && savedResults.lastUpdated) {
@@ -129,21 +120,17 @@ const EnhancedStockApp = () => {
             const now = new Date();
             const timeDiff = now.getTime() - lastUpdated.getTime();
             
-            // If time since last update exceeds the frequency, update it
+            // if time since last update exceeds the frequency
             if (timeDiff >= interval) {
               console.log(`Updating analysis for ${stockSymbol} (last updated: ${savedResults.lastUpdated})`);
               
-              // If we're currently viewing this stock, set to analyzing state
               if (selectedStock === stockSymbol) {
                 setIsAnalyzing(true);
               }
               
-              // Perform the analysis in the background
               await performAnalysis(stockSymbol, true);
               
-              // If we're currently viewing this stock, refresh the UI
               if (selectedStock === stockSymbol) {
-                // Fetch the updated results
                 const updatedResults = await ApiService.getAnalysisResults(currentUser.username, stockSymbol);
                 if (updatedResults.success && updatedResults.analysis) {
                   setAnalysisResults({
@@ -161,12 +148,11 @@ const EnhancedStockApp = () => {
           console.error(`Error checking/updating analysis for ${stockSymbol}:`, error);
         }
       }
-    }, 60000); // Check every minute
+    }, 60000); // check every minute
     
     return () => clearInterval(checkInterval);
   }, [isAuthenticated, currentUser, portfolio, selectedStock]);
   
-  // Separated analysis logic into its own function for reuse
   const performAnalysis = async (stockSymbol, isBackground = false) => {
     if (!currentUser || !currentUser.username) return null;
     
@@ -181,9 +167,7 @@ const EnhancedStockApp = () => {
       const data = await response.json();
       console.log(data);
       
-      // Check if the data has the expected structure
       if (data.success && data.results) {
-        // Group articles by source
         const articlesBySource = {
           'CNN': { articles: [], sentiment: 'Neutral', summary: '' },
           'The Guardian': { articles: [], sentiment: 'Neutral', summary: '' },
@@ -200,7 +184,6 @@ const EnhancedStockApp = () => {
             });
           });
           
-          // Set sentiment for CNN if available
           if (data.results.individual_predictions && data.results.individual_predictions.cnn) {
             articlesBySource['CNN'].sentiment = data.results.individual_predictions.cnn[1] || 'Neutral';
             articlesBySource['CNN'].summary = data.results.individual_predictions.cnn[0] || '';
@@ -217,7 +200,6 @@ const EnhancedStockApp = () => {
             });
           });
           
-          // Set sentiment for Guardian if available
           if (data.results.individual_predictions && data.results.individual_predictions.guardian) {
             articlesBySource['The Guardian'].sentiment = data.results.individual_predictions.guardian[1] || 'Neutral';
             articlesBySource['The Guardian'].summary = data.results.individual_predictions.guardian[0] || '';
@@ -234,7 +216,6 @@ const EnhancedStockApp = () => {
             });
           });
           
-          // Set sentiment for Fox if available
           if (data.results.individual_predictions && data.results.individual_predictions.fox) {
             articlesBySource['Fox News'].sentiment = data.results.individual_predictions.fox[1] || 'Neutral';
             articlesBySource['Fox News'].summary = data.results.individual_predictions.fox[0] || '';
@@ -274,7 +255,6 @@ const EnhancedStockApp = () => {
           isAnalyzed: true
         };
         
-        // Save the results to MongoDB if user is logged in
         try {
           await ApiService.saveAnalysisResults(
             currentUser.username,
@@ -286,14 +266,12 @@ const EnhancedStockApp = () => {
           console.error("Error saving analysis results:", saveError);
         }
         
-        // If not running in background, update the state
         if (!isBackground) {
           setAnalysisResults(analysisResults);
         }
         
         return analysisResults;
       } else {
-        // Handle unexpected data structure
         const errorResults = {
           stock: stockSymbol,
           sourceGroups: [{ 
@@ -310,7 +288,6 @@ const EnhancedStockApp = () => {
           isAnalyzed: true
         };
         
-        // Save error results too so we don't keep trying to fetch
         try {
           await ApiService.saveAnalysisResults(
             currentUser.username,
@@ -321,7 +298,6 @@ const EnhancedStockApp = () => {
           console.error("Error saving analysis results:", saveError);
         }
         
-        // If not running in background, update the state
         if (!isBackground) {
           setAnalysisResults(errorResults);
         }
@@ -330,7 +306,6 @@ const EnhancedStockApp = () => {
       }
     } catch (error) {
       console.error("Error fetching data:", error);
-      // Fallback to default data if API fails
       const fallbackResults = {
         stock: stockSymbol,
         sentiment: 'Neutral',
@@ -345,7 +320,6 @@ const EnhancedStockApp = () => {
         isAnalyzed: true
       };
       
-      // Save fallback results too
       try {
         await ApiService.saveAnalysisResults(
           currentUser.username,
@@ -356,7 +330,6 @@ const EnhancedStockApp = () => {
         console.error("Error saving fallback results:", saveError);
       }
       
-      // If not running in background, update the state
       if (!isBackground) {
         setAnalysisResults(fallbackResults);
       }
@@ -365,32 +338,26 @@ const EnhancedStockApp = () => {
     }
   };
 
-  // Update form data
   const handleChange = (e) => {
     const { name, value } = e.target;
     setFormData({ ...formData, [name]: value });
     
-    // Clear errors when user types
     if (errors[name]) {
       setErrors({ ...errors, [name]: null });
     }
   };
 
-  // Toggle stock selection
   const toggleStock = (stock) => {
     if (formData.stocks.includes(stock)) {
-      // Remove the stock
       setFormData({
         ...formData,
         stocks: formData.stocks.filter(s => s !== stock),
-        // Also remove from fullNameStocks if it exists
         fullNameStocks: { 
           ...formData.fullNameStocks,
           [stock]: undefined 
         }
       });
     } else {
-      // Add the stock - verify and get company name
       setIsVerifyingStock(true);
       
       ApiService.verifyStockSymbol(stock)
@@ -401,10 +368,10 @@ const EnhancedStockApp = () => {
             
             setFormData(prev => ({
               ...prev,
-              stocks: [...prev.stocks, stock], // Add simple symbol for selection UI
+              stocks: [...prev.stocks, stock],
               fullNameStocks: {
                 ...prev.fullNameStocks,
-                [stock]: fullNameFormat // Store the full display format for later use
+                [stock]: fullNameFormat 
               }
             }));
             
@@ -429,7 +396,6 @@ const EnhancedStockApp = () => {
         })
         .finally(() => {
           setIsVerifyingStock(false);
-          // Clear verification result after 3 seconds
           setTimeout(() => {
             setStockVerificationResult(null);
           }, 3000);
@@ -1936,7 +1902,6 @@ const EnhancedStockApp = () => {
       if (result.success) {
         setSettingsSuccess('Password updated successfully!');
         
-        // Clear password fields
         setSettingsForm({
           ...settingsForm,
           currentPassword: '',
@@ -1944,7 +1909,6 @@ const EnhancedStockApp = () => {
           confirmNewPassword: ''
         });
       } else {
-        // Handle specific errors
         if (result.message === 'Current password is incorrect') {
           setSettingsErrors({ 
             currentPassword: 'Current password is incorrect' 

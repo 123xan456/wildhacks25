@@ -1,7 +1,4 @@
-// Base URL for API calls
 const API_BASE_URL = 'http://localhost:8000/api';
-
-// Polygon API configuration 
 const POLYGON_API_BASE_URL = 'https://api.polygon.io';
 const POLYGON_API_KEY = 'Ipp3SKTtHg0TIEIRDUShlcm5tUNnyQKL';
 
@@ -112,7 +109,6 @@ const ApiService = {
 
   getHistoricalData: async (symbol, from, to, timespan = 'day') => {
     try {
-      // Format: YYYY-MM-DD
       const response = await fetch(
         `${POLYGON_API_BASE_URL}/v2/aggs/ticker/${symbol}/range/1/${timespan}/${from}/${to}?apiKey=${POLYGON_API_KEY}`
       );
