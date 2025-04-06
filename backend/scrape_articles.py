@@ -107,7 +107,6 @@ def scrape_site(base_url: str, keywords: List[str]):
                             print(f"Error fetching foxnews article content: {str(e)}")
                             first_paragraph = "[Content unavailable]"
                     
-                    
                     matching_headlines.append({
                         'title': title,
                         'url': url,
@@ -117,27 +116,18 @@ def scrape_site(base_url: str, keywords: List[str]):
             except Exception as e:
                 continue
 
-        return {base_url: matching_headlines}
+        return {site_type: matching_headlines}
     
     except Exception as e:
-        return {base_url: f"Error: {str(e)}"}
+        return {site_type: f"Error: {str(e)}"}
 
-def scrape_news_endpoint(keywords):
+def scrape_news(keywords):
     """Scrape all specified sites simultaneously"""
     cnn_scrape_res = scrape_site("https://www.cnn.com/business/investing", keywords)
     guardian_scrape_res = scrape_site("https://www.theguardian.com/us/business", keywords)
     fox_scrape_res = scrape_site("https://www.foxbusiness.com/", keywords)
     aggregated = cnn_scrape_res | guardian_scrape_res
     aggregated = aggregated | fox_scrape_res
-    
-    for _, articles in aggregated:
-        res = ""
-        count = 1
-        for article in articles:
-            res = res + f"Article {str(count)} title: {article['title']}\n"
-            res = res + f"Article {str(count)} summary: {article['first_paragraph']}\n \n"
-            count += 1
-            
     return aggregated
     
 if __name__=="__main__":
