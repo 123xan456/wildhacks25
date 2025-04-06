@@ -3,7 +3,7 @@ const API_BASE_URL = 'http://localhost:8000/api';
 
 // Polygon API configuration 
 const POLYGON_API_BASE_URL = 'https://api.polygon.io';
-const POLYGON_API_KEY = 'DUMMY_KEY';
+const POLYGON_API_KEY = 'Ipp3SKTtHg0TIEIRDUShlcm5tUNnyQKL';
 
 const ApiService = {
   testConnection: async () => {
