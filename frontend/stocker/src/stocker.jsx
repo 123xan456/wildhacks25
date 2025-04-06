@@ -78,6 +78,273 @@ const EnhancedStockApp = () => {
     }
   }, [isAuthenticated]); // Only run when authentication state changes
 
+  // Auto-update effect based on user preferences
+  useEffect(() => {
+    if (!isAuthenticated || !currentUser || !currentUser.frequency) return;
+    
+    // Convert frequency to milliseconds
+    const frequencyToMs = {
+      'every_5_minutes': 5 * 60 * 1000,
+      'every_30_minutes': 30 * 60 * 1000,
+      'hourly': 60 * 60 * 1000,
+      'daily': 24 * 60 * 60 * 1000,
+      'weekly': 7 * 24 * 60 * 60 * 1000
+    };
+    
+    const interval = frequencyToMs[currentUser.frequency] || 5 * 60 * 1000; // Default to 5 minutes
+    
+    console.log(`Setting up auto-update interval: ${interval}ms (${currentUser.frequency})`);
+    
+    // Check for updates every minute
+    const checkInterval = setInterval(async () => {
+      if (!currentUser || !currentUser.username) return;
+      
+      console.log("Checking for analyses that need updates...");
+      
+      // Get all user's stocks
+      const userStocks = portfolio.map(item => 
+        typeof item === 'string' ? item : item.symbol
+      );
+      
+      // For each stock, check if analysis exists and needs update
+      for (const stockSymbol of userStocks) {
+        try {
+          // Get the saved analysis
+          const savedResults = await ApiService.getAnalysisResults(currentUser.username, stockSymbol);
+          
+          if (savedResults.success && savedResults.analysis && savedResults.lastUpdated) {
+            const lastUpdated = new Date(savedResults.lastUpdated);
+            const now = new Date();
+            const timeDiff = now.getTime() - lastUpdated.getTime();
+            
+            // If time since last update exceeds the frequency, update it
+            if (timeDiff >= interval) {
+              console.log(`Updating analysis for ${stockSymbol} (last updated: ${savedResults.lastUpdated})`);
+              
+              // If we're currently viewing this stock, set to analyzing state
+              if (selectedStock === stockSymbol) {
+                setIsAnalyzing(true);
+              }
+              
+              // Perform the analysis in the background
+              await performAnalysis(stockSymbol, true);
+              
+              // If we're currently viewing this stock, refresh the UI
+              if (selectedStock === stockSymbol) {
+                // Fetch the updated results
+                const updatedResults = await ApiService.getAnalysisResults(currentUser.username, stockSymbol);
+                if (updatedResults.success && updatedResults.analysis) {
+                  setAnalysisResults({
+                    ...updatedResults.analysis,
+                    stock: stockSymbol,
+                    isAnalyzed: true,
+                    isSavedResult: true
+                  });
+                }
+                setIsAnalyzing(false);
+              }
+            }
+          }
+        } catch (error) {
+          console.error(`Error checking/updating analysis for ${stockSymbol}:`, error);
+        }
+      }
+    }, 60000); // Check every minute
+    
+    return () => clearInterval(checkInterval);
+  }, [isAuthenticated, currentUser, portfolio, selectedStock]);
+  
+  // Separated analysis logic into its own function for reuse
+  const performAnalysis = async (stockSymbol, isBackground = false) => {
+    if (!currentUser || !currentUser.username) return null;
+    
+    try {
+      const response = await fetch('http://localhost:8000/api/predict', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ stock: stockSymbol })
+      });
+      const data = await response.json();
+      console.log(data);
+      
+      // Check if the data has the expected structure
+      if (data.success && data.results) {
+        // Group articles by source
+        const articlesBySource = {
+          'CNN': { articles: [], sentiment: 'Neutral', summary: '' },
+          'The Guardian': { articles: [], sentiment: 'Neutral', summary: '' },
+          'Fox News': { articles: [], sentiment: 'Neutral', summary: '' }
+        };
+        
+        // Process CNN articles
+        if (data.results.cnn && data.results.cnn.length > 0) {
+          const cnnArticles = data.results.cnn || [];
+          cnnArticles.forEach(article => {
+            articlesBySource['CNN'].articles.push({
+              title: article.title,
+              summary: article.first_paragraph
+            });
+          });
+          
+          // Set sentiment for CNN if available
+          if (data.results.individual_predictions && data.results.individual_predictions.cnn) {
+            articlesBySource['CNN'].sentiment = data.results.individual_predictions.cnn[1] || 'Neutral';
+            articlesBySource['CNN'].summary = data.results.individual_predictions.cnn[0] || '';
+          }
+        }
+        
+        // Process Guardian articles
+        if (data.results.guardian && data.results.guardian.length > 0) {
+          const guardianArticles = data.results.guardian || [];
+          guardianArticles.forEach(article => {
+            articlesBySource['The Guardian'].articles.push({
+              title: article.title,
+              summary: article.first_paragraph
+            });
+          });
+          
+          // Set sentiment for Guardian if available
+          if (data.results.individual_predictions && data.results.individual_predictions.guardian) {
+            articlesBySource['The Guardian'].sentiment = data.results.individual_predictions.guardian[1] || 'Neutral';
+            articlesBySource['The Guardian'].summary = data.results.individual_predictions.guardian[0] || '';
+          }
+        }
+        
+        // Process Fox News articles
+        if (data.results.fox && data.results.fox.length > 0) {
+          const foxArticles = data.results.fox || [];
+          foxArticles.forEach(article => {
+            articlesBySource['Fox News'].articles.push({
+              title: article.title,
+              summary: article.first_paragraph
+            });
+          });
+          
+          // Set sentiment for Fox if available
+          if (data.results.individual_predictions && data.results.individual_predictions.fox) {
+            articlesBySource['Fox News'].sentiment = data.results.individual_predictions.fox[1] || 'Neutral';
+            articlesBySource['Fox News'].summary = data.results.individual_predictions.fox[0] || '';
+          }
+        }
+        
+        // Filter out sources with no articles
+        const sourcesWithArticles = Object.entries(articlesBySource)
+          .filter(([_, sourceData]) => sourceData.articles.length > 0)
+          .map(([source, sourceData]) => ({
+            source,
+            sentiment: sourceData.sentiment,
+            articles: sourceData.articles,
+            summary: sourceData.summary
+          }));
+        
+        // Create the analysis results with timestamp
+        const analysisResults = {
+          stock: stockSymbol,
+          sourceGroups: sourcesWithArticles.length > 0 ? sourcesWithArticles : [
+            { 
+              source: 'All news sources', 
+              sentiment: 'Neutral', 
+              articles: [{ title: 'No relevant articles found' }],
+              summary: "No articles available for analysis" 
+            }
+          ],
+          sentiment: data.results.final_prediction?.[1] || 'Neutral',
+          summary: data.results.final_prediction?.[0] || "No prediction data available",
+          lastUpdated: new Date().toISOString(),
+          isAnalyzed: true
+        };
+        
+        // Save the results to MongoDB if user is logged in
+        try {
+          await ApiService.saveAnalysisResults(
+            currentUser.username,
+            stockSymbol,
+            analysisResults
+          );
+          console.log(`Analysis for ${stockSymbol} saved to MongoDB`);
+        } catch (saveError) {
+          console.error("Error saving analysis results:", saveError);
+        }
+        
+        // If not running in background, update the state
+        if (!isBackground) {
+          setAnalysisResults(analysisResults);
+        }
+        
+        return analysisResults;
+      } else {
+        // Handle unexpected data structure
+        const errorResults = {
+          stock: stockSymbol,
+          sourceGroups: [{ 
+            source: 'All news sources', 
+            sentiment: 'Neutral', 
+            articles: [{ title: 'No relevant articles found' }],
+            summary: "No articles available for analysis" 
+          }],
+          sentiment: 'Neutral',
+          summary: "No prediction data available from the server",
+          lastUpdated: new Date().toISOString(),
+          isAnalyzed: true
+        };
+        
+        // Save error results too so we don't keep trying to fetch
+        try {
+          await ApiService.saveAnalysisResults(
+            currentUser.username,
+            stockSymbol,
+            errorResults
+          );
+        } catch (saveError) {
+          console.error("Error saving analysis results:", saveError);
+        }
+        
+        // If not running in background, update the state
+        if (!isBackground) {
+          setAnalysisResults(errorResults);
+        }
+        
+        return errorResults;
+      }
+    } catch (error) {
+      console.error("Error fetching data:", error);
+      // Fallback to default data if API fails
+      const fallbackResults = {
+        stock: stockSymbol,
+        sentiment: 'Neutral',
+        sourceGroups: [{ 
+          source: 'All news sources', 
+          sentiment: 'Neutral', 
+          articles: [{ title: 'No relevant articles found' }],
+          summary: "No articles available for analysis" 
+        }],
+        summary: "No prediction available due to service unavailability.",
+        lastUpdated: new Date().toISOString(),
+        isAnalyzed: true
+      };
+      
+      // Save fallback results too
+      try {
+        await ApiService.saveAnalysisResults(
+          currentUser.username,
+          stockSymbol,
+          fallbackResults
+        );
+      } catch (saveError) {
+        console.error("Error saving fallback results:", saveError);
+      }
+      
+      // If not running in background, update the state
+      if (!isBackground) {
+        setAnalysisResults(fallbackResults);
+      }
+      
+      return fallbackResults;
+    }
+  };
+
   // Update form data
   const handleChange = (e) => {
     const { name, value } = e.target;
@@ -539,180 +806,19 @@ const EnhancedStockApp = () => {
       // Otherwise, proceed with analysis
       setIsAnalyzing(true);
       
-      const response = await fetch('http://localhost:8000/api/predict', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ stock: stockSymbol })
-      });
-      const data = await response.json();
-      console.log(data);
+      // Use the performAnalysis function
+      await performAnalysis(stockSymbol);
       
-      // Check if the data has the expected structure
-      if (data.success && data.results) {
-        // Group articles by source
-        const articlesBySource = {
-          'CNN': { articles: [], sentiment: 'Neutral', summary: '' },
-          'The Guardian': { articles: [], sentiment: 'Neutral', summary: '' },
-          'Fox News': { articles: [], sentiment: 'Neutral', summary: '' }
-        };
-        
-        // Process CNN articles
-        if (data.results.cnn && data.results.cnn.length > 0) {
-          const cnnArticles = data.results.cnn || [];
-          cnnArticles.forEach(article => {
-            articlesBySource['CNN'].articles.push({
-              title: article.title,
-              summary: article.first_paragraph
-            });
-          });
-          
-          // Set sentiment for CNN if available
-          if (data.results.individual_predictions && data.results.individual_predictions.cnn) {
-            articlesBySource['CNN'].sentiment = data.results.individual_predictions.cnn[1] || 'Neutral';
-            articlesBySource['CNN'].summary = data.results.individual_predictions.cnn[0] || '';
-          }
-        }
-        
-        // Process Guardian articles
-        if (data.results.guardian && data.results.guardian.length > 0) {
-          const guardianArticles = data.results.guardian || [];
-          guardianArticles.forEach(article => {
-            articlesBySource['The Guardian'].articles.push({
-              title: article.title,
-              summary: article.first_paragraph
-            });
-          });
-          
-          // Set sentiment for Guardian if available
-          if (data.results.individual_predictions && data.results.individual_predictions.guardian) {
-            articlesBySource['The Guardian'].sentiment = data.results.individual_predictions.guardian[1] || 'Neutral';
-            articlesBySource['The Guardian'].summary = data.results.individual_predictions.guardian[0] || '';
-          }
-        }
-        
-        // Process Fox News articles
-        if (data.results.fox && data.results.fox.length > 0) {
-          const foxArticles = data.results.fox || [];
-          foxArticles.forEach(article => {
-            articlesBySource['Fox News'].articles.push({
-              title: article.title,
-              summary: article.first_paragraph
-            });
-          });
-          
-          // Set sentiment for Fox if available
-          if (data.results.individual_predictions && data.results.individual_predictions.fox) {
-            articlesBySource['Fox News'].sentiment = data.results.individual_predictions.fox[1] || 'Neutral';
-            articlesBySource['Fox News'].summary = data.results.individual_predictions.fox[0] || '';
-          }
-        }
-        
-        // Filter out sources with no articles
-        const sourcesWithArticles = Object.entries(articlesBySource)
-          .filter(([_, sourceData]) => sourceData.articles.length > 0)
-          .map(([source, sourceData]) => ({
-            source,
-            sentiment: sourceData.sentiment,
-            articles: sourceData.articles,
-            summary: sourceData.summary
-          }));
-        
-        // Create the analysis results with timestamp
-        const analysisResults = {
-          stock: stockSymbol,
-          sourceGroups: sourcesWithArticles.length > 0 ? sourcesWithArticles : [
-            { 
-              source: 'All news sources', 
-              sentiment: 'Neutral', 
-              articles: [{ title: 'No relevant articles found' }],
-              summary: "No articles available for analysis" 
-            }
-          ],
-          sentiment: data.results.final_prediction?.[1] || 'Neutral',
-          summary: data.results.final_prediction?.[0] || "No prediction data available",
-          lastUpdated: new Date().toISOString(),
-          isAnalyzed: true
-        };
-        
-        // Save the results to MongoDB if user is logged in
-        if (currentUser && currentUser.username) {
-          try {
-            await ApiService.saveAnalysisResults(
-              currentUser.username,
-              stockSymbol,
-              analysisResults
-            );
-          } catch (saveError) {
-            console.error("Error saving analysis results:", saveError);
-          }
-        }
-        
-        // Update the state with results
-        setAnalysisResults(analysisResults);
-      } else {
-        // Handle unexpected data structure
-        const errorResults = {
-          stock: stockSymbol,
-          sourceGroups: [{ 
-            source: 'All news sources', 
-            sentiment: 'Neutral', 
-            articles: [{ title: 'No relevant articles found' }],
-            summary: "No articles available for analysis" 
-          }],
-          sentiment: 'Neutral',
-          summary: "No prediction data available from the server",
-          lastUpdated: new Date().toISOString(),
-          isAnalyzed: true
-        };
-        
-        // Save error results too so we don't keep trying to fetch
-        if (currentUser && currentUser.username) {
-          try {
-            await ApiService.saveAnalysisResults(
-              currentUser.username,
-              stockSymbol,
-              errorResults
-            );
-          } catch (saveError) {
-            console.error("Error saving analysis results:", saveError);
-          }
-        }
-        
-        setAnalysisResults(errorResults);
-      }
     } catch (error) {
-      console.error("Error fetching data:", error);
-      // Fallback to default data if API fails
-      const fallbackResults = {
+      console.error("Error in analyzeStock:", error);
+      setAnalysisResults({
         stock: stockSymbol,
-        sentiment: 'Neutral',
-        sourceGroups: [{ 
-          source: 'All news sources', 
-          sentiment: 'Neutral', 
-          articles: [{ title: 'No relevant articles found' }],
-          summary: "No articles available for analysis" 
-        }],
-        summary: "No prediction available due to service unavailability.",
-        lastUpdated: new Date().toISOString(),
-        isAnalyzed: true
-      };
-      
-      // Save fallback results too
-      if (currentUser && currentUser.username) {
-        try {
-          await ApiService.saveAnalysisResults(
-            currentUser.username,
-            stockSymbol,
-            fallbackResults
-          );
-        } catch (saveError) {
-          console.error("Error saving fallback results:", saveError);
-        }
-      }
-      
-      setAnalysisResults(fallbackResults);
+        sourceGroups: [],
+        sentiment: null,
+        summary: "An error occurred while analyzing the stock.",
+        isAnalyzed: false,
+        lastUpdated: null
+      });
     } finally {
       setIsAnalyzing(false);
     }
