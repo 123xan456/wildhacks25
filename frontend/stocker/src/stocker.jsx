@@ -52,6 +52,13 @@ const EnhancedStockApp = () => {
     'TSLA', 'NVDA', 'JPM', 'V', 'WMT'
   ];
 
+  // Use an effect to load stock details when portfolio changes
+  useEffect(() => {
+    if (portfolio.length > 0 && isAuthenticated) {
+      fetchPortfolioDetails(portfolio);
+    }
+  }, [isAuthenticated]); // Only run when authentication state changes
+
   // Update form data
   const handleChange = (e) => {
     const { name, value } = e.target;
@@ -269,6 +276,10 @@ const EnhancedStockApp = () => {
     
     setIsLoading(true);
     try {
+      // Get list of stocks that were added and removed
+      const previousStocks = new Set(portfolio);
+      const newStocks = new Set(formData.stocks);
+      
       // Save stocks to MongoDB
       const stocksResult = await ApiService.updateStocks(
         currentUser.username,
@@ -292,7 +303,7 @@ const EnhancedStockApp = () => {
           frequency: formData.frequency
         });
         
-        // Fetch details for all stocks
+        // Fetch details for all stocks, including previous ones in case we're re-adding them
         await fetchPortfolioDetails(formData.stocks);
         
         // Hide portfolio form
@@ -649,10 +660,11 @@ const EnhancedStockApp = () => {
                 <div key={stock} className="portfolio-stock-item">
                   <div className="stock-info">
                     <span className="stock-symbol">{stock}</span>
-                    {portfolioDetails[stock] && 
-                     portfolioDetails[stock].name && 
-                     portfolioDetails[stock].name !== stock && (
+                    {portfolioDetails[stock]?.name && 
+                     portfolioDetails[stock].name !== stock ? (
                       <span className="stock-company-name"> | {portfolioDetails[stock].name}</span>
+                    ) : portfolioDetails[stock] ? null : (
+                      <span className="loading-company-name"> | Loading...</span>
                     )}
                   </div>
                   <button 
@@ -857,11 +869,10 @@ const EnhancedStockApp = () => {
                     onClick={() => analyzeStock(stock)}
                   >
                     <span className="stock-button-symbol">{stock}</span>
-                    {portfolioDetails[stock] && 
-                     portfolioDetails[stock].name && 
-                     portfolioDetails[stock].name !== stock && (
+                    {portfolioDetails[stock]?.name && 
+                     portfolioDetails[stock].name !== stock ? (
                       <span className="stock-button-company"> | {portfolioDetails[stock].name}</span>
-                    )}
+                    ) : null}
                   </button>
                 ))}
               </div>
@@ -1031,9 +1042,15 @@ const EnhancedStockApp = () => {
 
   // Fetch details for all stocks in portfolio
   const fetchPortfolioDetails = async (stocks) => {
-    const details = {};
+    const details = { ...portfolioDetails }; // Start with existing details
+    const newStocks = stocks.filter(stock => !details[stock]); // Only fetch for new stocks
     
-    for (const stock of stocks) {
+    // Show loading indicator if fetching many stocks
+    if (newStocks.length > 3) {
+      setIsLoading(true);
+    }
+    
+    for (const stock of newStocks) {
       try {
         const stockInfo = await ApiService.verifyStockSymbol(stock);
         if (stockInfo.valid) {
@@ -1042,6 +1059,9 @@ const EnhancedStockApp = () => {
             name: stockInfo.name || stock,
             market: stockInfo.market
           };
+        } else {
+          // Add placeholder if verification fails
+          details[stock] = { symbol: stock, name: stock };
         }
       } catch (error) {
         console.error(`Error fetching details for ${stock}:`, error);
@@ -1050,7 +1070,12 @@ const EnhancedStockApp = () => {
       }
     }
     
+    // Set the updated portfolio details with both existing and new stock info
     setPortfolioDetails(details);
+    
+    if (newStocks.length > 3) {
+      setIsLoading(false);
+    }
   };
 
   return isAuthenticated ? renderMainApp() : renderAuthForm();
