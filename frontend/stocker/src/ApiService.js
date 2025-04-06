@@ -193,6 +193,52 @@ const ApiService = {
       console.error('Error fetching analysis results:', error);
       return { success: false, message: 'Error connecting to server' };
     }
+  },
+
+  // Update username
+  updateUsername: async (currentUsername, newUsername, password) => {
+    try {
+      const response = await fetch(`${API_BASE_URL}/update_username`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          currentUsername,
+          newUsername,
+          password
+        })
+      });
+      
+      const data = await response.json();
+      return data;
+    } catch (error) {
+      console.error('Error updating username:', error);
+      return { success: false, message: 'Error connecting to server' };
+    }
+  },
+  
+  // Update password
+  updatePassword: async (username, currentPassword, newPassword) => {
+    try {
+      const response = await fetch(`${API_BASE_URL}/update_password`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          username,
+          currentPassword,
+          newPassword
+        })
+      });
+      
+      const data = await response.json();
+      return data;
+    } catch (error) {
+      console.error('Error updating password:', error);
+      return { success: false, message: 'Error connecting to server' };
+    }
   }
 };
 

@@ -31,6 +31,18 @@ const EnhancedStockApp = () => {
   const [errors, setErrors] = useState({});
   const [accountCreated, setAccountCreated] = useState(false);
   
+  // Settings modal states
+  const [showSettings, setShowSettings] = useState(false);
+  const [settingsTab, setSettingsTab] = useState('profile');
+  const [settingsForm, setSettingsForm] = useState({
+    username: '',
+    currentPassword: '',
+    newPassword: '',
+    confirmNewPassword: ''
+  });
+  const [settingsErrors, setSettingsErrors] = useState({});
+  const [settingsSuccess, setSettingsSuccess] = useState(null);
+  
   // Portfolio and analysis states
   const [portfolio, setPortfolio] = useState([]);
   const [showPortfolioForm, setShowPortfolioForm] = useState(false);
@@ -943,7 +955,7 @@ const EnhancedStockApp = () => {
 
     return (
       <div className="form-container">
-        <h2 className="form-title">{authMode === 'signin' ? 'Sign In' : 'Create Account'}</h2>
+        <h2 className="form-title">{authMode === 'signin' ? 'StockSage Sign In' : 'Create StockSage Account'}</h2>
         
         <div className="form-field">
           <label className="field-label">Username</label>
@@ -1031,9 +1043,20 @@ const EnhancedStockApp = () => {
     return (
       <div className="app-container">
         <div className="app-header">
-          <h1 className="app-title">Stock Prediction Dashboard</h1>
+          <h1 className="app-title">StockSage Dashboard</h1>
           <div className="user-section">
             <span className="username">{currentUser?.username || formData.username}</span>
+            <button 
+              type="button" 
+              onClick={toggleSettings}
+              className="settings-button"
+              title="Account Settings"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16">
+                <path d="M8 4.754a3.246 3.246 0 1 0 0 6.492 3.246 3.246 0 0 0 0-6.492zM5.754 8a2.246 2.246 0 1 1 4.492 0 2.246 2.246 0 0 1-4.492 0z"/>
+                <path d="M9.796 1.343c-.527-1.79-3.065-1.79-3.592 0l-.094.319a.873.873 0 0 1-1.255.52l-.292-.16c-1.64-.892-3.433.902-2.54 2.541l.159.292a.873.873 0 0 1-.52 1.255l-.319.094c-1.79.527-1.79 3.065 0 3.592l.319.094a.873.873 0 0 1 .52 1.255l-.16.292c-.892 1.64.901 3.434 2.541 2.54l.292-.159a.873.873 0 0 1 1.255.52l.094.319c.527 1.79 3.065 1.79 3.592 0l.094-.319a.873.873 0 0 1 1.255-.52l.292.16c1.64.893 3.434-.902 2.54-2.541l-.159-.292a.873.873 0 0 1 .52-1.255l.319-.094c1.79-.527 1.79-3.065 0-3.592l-.319-.094a.873.873 0 0 1-.52-1.255l.16-.292c.893-1.64-.902-3.433-2.541-2.54l-.292.159a.873.873 0 0 1-1.255-.52l-.094-.319zm-2.633.283c.246-.835 1.428-.835 1.674 0l.094.319a1.873 1.873 0 0 0 2.693 1.115l.291-.16c.764-.415 1.6.42 1.184 1.185l-.159.292a1.873 1.873 0 0 0 1.116 2.692l.318.094c.835.246.835 1.428 0 1.674l-.319.094a1.873 1.873 0 0 0-1.115 2.693l.16.291c.415.764-.42 1.6-1.185 1.184l-.291-.159a1.873 1.873 0 0 0-2.693 1.116l-.094.318c-.246.835-1.428.835-1.674 0l-.094-.319a1.873 1.873 0 0 0-2.692-1.115l-.292.16c-.764.415-1.6-.42-1.184-1.185l.159-.291A1.873 1.873 0 0 0 1.945 8.93l-.319-.094c-.835-.246-.835-1.428 0-1.674l.319-.094A1.873 1.873 0 0 0 3.06 4.377l-.16-.292c-.415-.764.42-1.6 1.185-1.184l.292.159a1.873 1.873 0 0 0 2.692-1.115l.094-.319z"/>
+              </svg>
+            </button>
             <button 
               type="button" 
               onClick={handleSignOut}
@@ -1043,6 +1066,198 @@ const EnhancedStockApp = () => {
             </button>
           </div>
         </div>
+        
+        {/* Settings Modal */}
+        {showSettings && (
+          <div className="modal-overlay">
+            <div className="modal-container settings-modal">
+              <div className="modal-header">
+                <h2 className="modal-title">Account Settings</h2>
+                <button 
+                  className="close-button" 
+                  onClick={toggleSettings}
+                >
+                  ×
+                </button>
+              </div>
+              
+              <div className="settings-tabs">
+                <button 
+                  className={`settings-tab ${settingsTab === 'profile' ? 'active' : ''}`}
+                  onClick={() => {
+                    setSettingsTab('profile');
+                    setSettingsErrors({});
+                    setSettingsSuccess(null);
+                  }}
+                >
+                  Profile
+                </button>
+                <button 
+                  className={`settings-tab ${settingsTab === 'password' ? 'active' : ''}`}
+                  onClick={() => {
+                    setSettingsTab('password');
+                    setSettingsErrors({});
+                    setSettingsSuccess(null);
+                  }}
+                >
+                  Password
+                </button>
+              </div>
+              
+              <div className="settings-content">
+                {settingsSuccess && (
+                  <div className="success-message">
+                    <CheckCircle className="success-icon" size={16} />
+                    <span>{settingsSuccess}</span>
+                  </div>
+                )}
+                
+                {settingsErrors.general && (
+                  <div className="error-message">
+                    <AlertCircle className="error-icon" size={16} />
+                    <span>{settingsErrors.general}</span>
+                  </div>
+                )}
+                
+                {settingsTab === 'profile' ? (
+                  <div className="settings-form">
+                    <div className="form-field">
+                      <label className="field-label">Username</label>
+                      <input
+                        type="text"
+                        name="username"
+                        value={settingsForm.username}
+                        onChange={handleSettingsChange}
+                        className={`text-input ${settingsErrors.username ? 'error' : ''}`}
+                        disabled={isLoading}
+                      />
+                      {settingsErrors.username && (
+                        <div className="error-message">
+                          <AlertCircle className="error-icon" size={14} />
+                          <span>{settingsErrors.username}</span>
+                        </div>
+                      )}
+                    </div>
+                    
+                    <div className="form-field">
+                      <label className="field-label">Current Password (to verify)</label>
+                      <div className="password-input-wrapper">
+                        <input
+                          type={showPassword ? "text" : "password"}
+                          name="currentPassword"
+                          value={settingsForm.currentPassword}
+                          onChange={handleSettingsChange}
+                          className={`text-input ${settingsErrors.currentPassword ? 'error' : ''}`}
+                          disabled={isLoading}
+                        />
+                        <button 
+                          type="button" 
+                          onClick={() => setShowPassword(!showPassword)}
+                          className="password-toggle"
+                          disabled={isLoading}
+                        >
+                          {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                        </button>
+                      </div>
+                      {settingsErrors.currentPassword && (
+                        <div className="error-message">
+                          <AlertCircle className="error-icon" size={14} />
+                          <span>{settingsErrors.currentPassword}</span>
+                        </div>
+                      )}
+                    </div>
+                    
+                    <button
+                      className="primary-button full-width"
+                      onClick={updateUsername}
+                      disabled={isLoading}
+                    >
+                      {isLoading ? 'Updating...' : 'Update Username'}
+                    </button>
+                  </div>
+                ) : (
+                  <div className="settings-form">
+                    <div className="form-field">
+                      <label className="field-label">Current Password</label>
+                      <div className="password-input-wrapper">
+                        <input
+                          type={showPassword ? "text" : "password"}
+                          name="currentPassword"
+                          value={settingsForm.currentPassword}
+                          onChange={handleSettingsChange}
+                          className={`text-input ${settingsErrors.currentPassword ? 'error' : ''}`}
+                          disabled={isLoading}
+                        />
+                        <button 
+                          type="button" 
+                          onClick={() => setShowPassword(!showPassword)}
+                          className="password-toggle"
+                          disabled={isLoading}
+                        >
+                          {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                        </button>
+                      </div>
+                      {settingsErrors.currentPassword && (
+                        <div className="error-message">
+                          <AlertCircle className="error-icon" size={14} />
+                          <span>{settingsErrors.currentPassword}</span>
+                        </div>
+                      )}
+                    </div>
+                    
+                    <div className="form-field">
+                      <label className="field-label">New Password</label>
+                      <div className="password-input-wrapper">
+                        <input
+                          type={showPassword ? "text" : "password"}
+                          name="newPassword"
+                          value={settingsForm.newPassword}
+                          onChange={handleSettingsChange}
+                          className={`text-input ${settingsErrors.newPassword ? 'error' : ''}`}
+                          disabled={isLoading}
+                        />
+                      </div>
+                      {settingsErrors.newPassword && (
+                        <div className="error-message">
+                          <AlertCircle className="error-icon" size={14} />
+                          <span>{settingsErrors.newPassword}</span>
+                        </div>
+                      )}
+                    </div>
+                    
+                    <div className="form-field">
+                      <label className="field-label">Confirm New Password</label>
+                      <div className="password-input-wrapper">
+                        <input
+                          type={showPassword ? "text" : "password"}
+                          name="confirmNewPassword"
+                          value={settingsForm.confirmNewPassword}
+                          onChange={handleSettingsChange}
+                          className={`text-input ${settingsErrors.confirmNewPassword ? 'error' : ''}`}
+                          disabled={isLoading}
+                        />
+                      </div>
+                      {settingsErrors.confirmNewPassword && (
+                        <div className="error-message">
+                          <AlertCircle className="error-icon" size={14} />
+                          <span>{settingsErrors.confirmNewPassword}</span>
+                        </div>
+                      )}
+                    </div>
+                    
+                    <button
+                      className="primary-button full-width"
+                      onClick={updatePassword}
+                      disabled={isLoading}
+                    >
+                      {isLoading ? 'Updating...' : 'Update Password'}
+                    </button>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
         
         <div className="app-tabs">
           <button 
@@ -1298,7 +1513,7 @@ const EnhancedStockApp = () => {
   const renderAnalysisTab = () => {
     return (
       <div className="analysis-container">
-        <h2 className="section-title">Stock Analysis & Predictions</h2>
+        <h2 className="section-title">Stock Market Trend Analysis</h2>
         
         {!selectedStock ? (
           <div className="select-stock-prompt">
@@ -1359,10 +1574,10 @@ const EnhancedStockApp = () => {
               </h3>
               {analysisResults.isAnalyzed && console.log("Sentiment value:", analysisResults.sentiment, "Type:", typeof analysisResults.sentiment)}
               {analysisResults.isAnalyzed && (
-                <div className={`prediction-badge ${analysisResults.sentiment === 'negative' ? 'negative' : analysisResults.sentiment === 'positive' ? 'positive' : 'neutral'}`}>
-                  {analysisResults.sentiment === 'positive' ? 'Upward Trend Expected' : 
-                   analysisResults.sentiment === 'negative' ? 'Downward Trend Expected' : 
-                   'Neutral Outlook'}
+                <div className={`market-trend-badge ${analysisResults.sentiment === 'negative' ? 'negative' : analysisResults.sentiment === 'positive' ? 'positive' : 'neutral'}`}>
+                  {analysisResults.sentiment === 'positive' ? 'Potential Upward Trend' : 
+                   analysisResults.sentiment === 'negative' ? 'Potential Downward Trend' : 
+                   'Neutral Market Signals'}
                 </div>
               )}
             </div>
@@ -1484,7 +1699,7 @@ const EnhancedStockApp = () => {
                 <div className="prediction-summary">
                   <h4 className="section-subtitle">
                     <TrendingUp size={16} />
-                    Prediction Summary
+                    Market Sentiment Summary
                   </h4>
                   <p>{analysisResults.summary}</p>
                 </div>
@@ -1496,7 +1711,7 @@ const EnhancedStockApp = () => {
                   className="primary-button generate-analysis-button"
                   onClick={() => analyzeStock(selectedStock)}
                 >
-                  Generate Analysis
+                  Generate Market Insights
                 </button>
               </div>
             )}
@@ -1561,6 +1776,181 @@ const EnhancedStockApp = () => {
     setPortfolioDetails(details);
     
     if (newStocks.length > 3) {
+      setIsLoading(false);
+    }
+  };
+
+  // Handle settings toggle
+  const toggleSettings = () => {
+    // Initialize form with current user data
+    if (!showSettings && currentUser) {
+      setSettingsForm({
+        ...settingsForm,
+        username: currentUser.username,
+        currentPassword: '',
+        newPassword: '',
+        confirmNewPassword: ''
+      });
+    }
+    setShowSettings(!showSettings);
+    setSettingsTab('profile');
+    setSettingsErrors({});
+    setSettingsSuccess(null);
+  };
+  
+  // Handle settings form change
+  const handleSettingsChange = (e) => {
+    const { name, value } = e.target;
+    setSettingsForm({ ...settingsForm, [name]: value });
+    
+    // Clear errors when user types
+    if (settingsErrors[name]) {
+      setSettingsErrors({ ...settingsErrors, [name]: null });
+    }
+  };
+  
+  // Validate username change
+  const validateUsernameChange = () => {
+    const newErrors = {};
+    
+    if (!settingsForm.username) {
+      newErrors.username = 'Username is required';
+    } else if (settingsForm.username.length < 4) {
+      newErrors.username = 'Username must be at least 4 characters';
+    }
+    
+    if (!settingsForm.currentPassword) {
+      newErrors.currentPassword = 'Current password is required to verify your identity';
+    }
+    
+    setSettingsErrors(newErrors);
+    return Object.keys(newErrors).length === 0;
+  };
+  
+  // Validate password change
+  const validatePasswordChange = () => {
+    const newErrors = {};
+    
+    if (!settingsForm.currentPassword) {
+      newErrors.currentPassword = 'Current password is required';
+    }
+    
+    if (!settingsForm.newPassword) {
+      newErrors.newPassword = 'New password is required';
+    } else if (settingsForm.newPassword.length < 6) {
+      newErrors.newPassword = 'New password must be at least 6 characters';
+    }
+    
+    if (settingsForm.newPassword !== settingsForm.confirmNewPassword) {
+      newErrors.confirmNewPassword = 'Passwords do not match';
+    }
+    
+    setSettingsErrors(newErrors);
+    return Object.keys(newErrors).length === 0;
+  };
+  
+  // Handle username update
+  const updateUsername = async () => {
+    if (!validateUsernameChange()) {
+      return;
+    }
+    
+    // Skip if username hasn't changed
+    if (settingsForm.username === currentUser.username) {
+      setSettingsSuccess('No changes were made to your username.');
+      return;
+    }
+    
+    setIsLoading(true);
+    try {
+      const result = await ApiService.updateUsername(
+        currentUser.username, 
+        settingsForm.username, 
+        settingsForm.currentPassword
+      );
+      
+      if (result.success) {
+        // Update current user in state
+        setCurrentUser({
+          ...currentUser,
+          username: settingsForm.username
+        });
+        
+        setSettingsSuccess('Username updated successfully!');
+        
+        // Clear password field
+        setSettingsForm({
+          ...settingsForm,
+          currentPassword: ''
+        });
+      } else {
+        // Handle specific errors
+        if (result.message === 'Incorrect password') {
+          setSettingsErrors({ 
+            currentPassword: 'Incorrect password' 
+          });
+        } else if (result.message === 'Username already exists') {
+          setSettingsErrors({ 
+            username: 'This username is already taken' 
+          });
+        } else {
+          setSettingsErrors({ 
+            general: result.message || 'An error occurred' 
+          });
+        }
+      }
+    } catch (error) {
+      console.error("Error updating username:", error);
+      setSettingsErrors({ 
+        general: 'Unable to connect to server' 
+      });
+    } finally {
+      setIsLoading(false);
+    }
+  };
+  
+  // Handle password update
+  const updatePassword = async () => {
+    if (!validatePasswordChange()) {
+      return;
+    }
+    
+    setIsLoading(true);
+    try {
+      const result = await ApiService.updatePassword(
+        currentUser.username, 
+        settingsForm.currentPassword, 
+        settingsForm.newPassword
+      );
+      
+      if (result.success) {
+        setSettingsSuccess('Password updated successfully!');
+        
+        // Clear password fields
+        setSettingsForm({
+          ...settingsForm,
+          currentPassword: '',
+          newPassword: '',
+          confirmNewPassword: ''
+        });
+      } else {
+        // Handle specific errors
+        if (result.message === 'Current password is incorrect') {
+          setSettingsErrors({ 
+            currentPassword: 'Current password is incorrect' 
+          });
+        } else {
+          setSettingsErrors({ 
+            general: result.message || 'An error occurred' 
+          });
+        }
+      }
+    } catch (error) {
+      console.error("Error updating password:", error);
+      setSettingsErrors({ 
+        general: 'Unable to connect to server' 
+      });
+    } finally {
       setIsLoading(false);
     }
   };

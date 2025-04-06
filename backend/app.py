@@ -305,5 +305,91 @@ def get_analysis():
         print(f"Error retrieving analysis: {e}")
         return jsonify({"success": False, "message": str(e)})
 
+@app.route('/api/update_username', methods=['POST', 'OPTIONS'])
+def update_username():
+    if request.method == 'OPTIONS':
+        return handle_options()
+    
+    data = request.json
+    current_username = data.get('currentUsername')
+    new_username = data.get('newUsername')
+    password = data.get('password')
+    
+    if not current_username or not new_username or not password:
+        return jsonify({"success": False, "message": "Missing required fields"}), 400
+    
+    try:
+        # Check if user exists
+        user = db.users.find_one({"username": current_username})
+        if not user:
+            return jsonify({"success": False, "message": "User not found"}), 404
+        
+        # Verify password
+        if not check_password_hash(user['password'], password):
+            return jsonify({"success": False, "message": "Incorrect password"}), 401
+        
+        # Check if new username is already taken
+        if db.users.find_one({"username": new_username}) and new_username != current_username:
+            return jsonify({"success": False, "message": "Username already exists"}), 400
+        
+        # Update username in all collections
+        
+        # 1. Update in users collection
+        db.users.update_one(
+            {"username": current_username},
+            {"$set": {"username": new_username}}
+        )
+        
+        # 2. Update in analyses collection
+        if "analyses" in db.list_collection_names():
+            db.analyses.update_many(
+                {"username": current_username},
+                {"$set": {"username": new_username}}
+            )
+        
+        return jsonify({"success": True, "message": "Username updated successfully"})
+    
+    except Exception as e:
+        print(f"Error updating username: {e}")
+        return jsonify({"success": False, "message": str(e)}), 500
+
+@app.route('/api/update_password', methods=['POST', 'OPTIONS'])
+def update_password():
+    if request.method == 'OPTIONS':
+        return handle_options()
+    
+    data = request.json
+    username = data.get('username')
+    current_password = data.get('currentPassword')
+    new_password = data.get('newPassword')
+    
+    if not username or not current_password or not new_password:
+        return jsonify({"success": False, "message": "Missing required fields"}), 400
+    
+    try:
+        # Check if user exists
+        user = db.users.find_one({"username": username})
+        if not user:
+            return jsonify({"success": False, "message": "User not found"}), 404
+        
+        # Verify current password
+        if not check_password_hash(user['password'], current_password):
+            return jsonify({"success": False, "message": "Current password is incorrect"}), 401
+        
+        # Hash new password
+        hashed_password = generate_password_hash(new_password)
+        
+        # Update password
+        db.users.update_one(
+            {"username": username},
+            {"$set": {"password": hashed_password}}
+        )
+        
+        return jsonify({"success": True, "message": "Password updated successfully"})
+    
+    except Exception as e:
+        print(f"Error updating password: {e}")
+        return jsonify({"success": False, "message": str(e)}), 500
+
 if __name__ == '__main__':
     app.run(debug=True, port=8000) 
