@@ -31,10 +31,10 @@ model = model_setup()
 #%%
 def generate_key_words(stock):
     response = model.invoke(f""" 
-                            You are an expert in the stock market and are responsible for generating the 5 most relevant words to a given stock abbreviation.
+                            You are an expert in the stock market and are responsible for generating the 5 most relevant words to a given stock abbreviation. These keywords should be words that would appear in a news headline and should not be plural.
                             Here are step by step examples of how to generate the key words:
                             Example 1: TSLA
-                            'electric vehicle', 'car', 'Elon Musk', 'AI', 'autodrive'
+                            'electric', 'car', 'Elon Musk', 'AI', 'autodrive'
                             Example 2: NVDA
                             'AI', 'GPU', 'technology', 'infrastructure', 'data'
                             Example 3: AMZN

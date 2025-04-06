@@ -19,21 +19,23 @@ def scrape_site(base_url: str, keywords: List[str]):
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
         }
         response = requests.get(base_url, headers=headers, timeout=10)
-        response.raise_for_status()
-        
+        response.raise_for_status()        
         soup = BeautifulSoup(response.text, 'html.parser')
         site_type = get_site_type(base_url)
         headline_elements = []
         if site_type == 'fox':
-            for i in range(1, 6):
-                headline_elements.append(
-                    soup.find_all('a', attrs={'data-omtr-intcmp': f'hp_doomsday_bigtop{str(i)}'})
-                )
+            all_headers = soup.find_all('header', class_='info-header')
+            valid_headers = []
+            for header in all_headers:
+                title_tag = header.find(['h2', 'h3'], class_='title')
+                if title_tag and title_tag.find('a'):
+                    valid_headers.append(header)
+            headline_elements = valid_headers[:4]
         elif site_type == 'guardian':
-            headline_elements = soup.find_all('a', class_='dcr-2yd10d')[:5]
+            headline_elements = soup.find_all('a', class_='dcr-2yd10d')[:3]
         elif site_type == 'cnn':
             headline_elements = soup.find_all(['span'], 
-                class_=lambda x: x and 'headline' in x.lower())[:5]
+                class_=lambda x: x and 'headline' in x.lower())[:3]
         else:
             return {base_url: []}
 
@@ -43,8 +45,12 @@ def scrape_site(base_url: str, keywords: List[str]):
             try:
                 title, url = '', ''
                 if site_type == 'fox':
-                    url = element.get('href', '')
-                    title = element.get_text(strip=True)
+                    title_tag = element.find(['h2', 'h3'], class_='title')
+                    if title_tag:
+                        a_tag = title_tag.find('a')
+                        if a_tag:
+                            url = a_tag.get('href', '')
+                            title = a_tag.get_text(strip=True)
                 elif site_type == 'guardian':
                     url = element.get('href', '')
                     title = element.get('aria-label', '')  
@@ -116,14 +122,25 @@ def scrape_site(base_url: str, keywords: List[str]):
     except Exception as e:
         return {base_url: f"Error: {str(e)}"}
 
-def scrape_news(keywords):
+def scrape_news_endpoint(keywords):
     """Scrape all specified sites simultaneously"""
     cnn_scrape_res = scrape_site("https://www.cnn.com/business/investing", keywords)
     guardian_scrape_res = scrape_site("https://www.theguardian.com/us/business", keywords)
+    fox_scrape_res = scrape_site("https://www.foxbusiness.com/", keywords)
     aggregated = cnn_scrape_res | guardian_scrape_res
-    return aggregated
+    aggregated = aggregated | fox_scrape_res
     
+    for _, articles in aggregated:
+        res = ""
+        count = 1
+        for article in articles:
+            res = res + f"Article {str(count)} title: {article['title']}\n"
+            res = res + f"Article {str(count)} summary: {article['first_paragraph']}\n \n"
+            count += 1
+            
+    return aggregated
     
 if __name__=="__main__":
     print(scrape_site("https://www.cnn.com/business/investing", ["tariff"]))
     print(scrape_site("https://www.theguardian.com/us/business", ["tariff"]))
+    print(scrape_site("https://www.foxbusiness.com/", ["tariff"]))
