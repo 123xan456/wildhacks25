@@ -1,6 +1,6 @@
 const API_BASE_URL = 'http://localhost:8000/api';
 const POLYGON_API_BASE_URL = 'https://api.polygon.io';
-const POLYGON_API_KEY = 'MFsJ1WFJwpgpR9BXzJ24byShrdlVdp6a'; // Only use when demo: Ipp3SKTtHg0TIEIRDUShlcm5tUNnyQKL
+const POLYGON_API_KEY = 'Ipp3SKTtHg0TIEIRDUShlcm5tUNnyQKL';
 
 const ApiService = {
   testConnection: async () => {
@@ -13,7 +13,6 @@ const ApiService = {
     }
   },
 
-  // signup
   signup: async (username, password) => {
     try {
       const response = await fetch(`${API_BASE_URL}/signup`, {
@@ -30,7 +29,6 @@ const ApiService = {
     }
   },
 
-  // signin
   signin: async (username, password) => {
     try {
       const response = await fetch(`${API_BASE_URL}/signin`, {
@@ -47,7 +45,6 @@ const ApiService = {
     }
   },
 
-  // update selected stocks
   updateStocks: async (username, stocks) => {
     try {
       const response = await fetch(`${API_BASE_URL}/update_stocks`, {
@@ -64,7 +61,6 @@ const ApiService = {
     }
   },
 
-  // update frequency preference
   updateFrequency: async (username, frequency) => {
     try {
       const response = await fetch(`${API_BASE_URL}/update_frequency`, {
@@ -81,7 +77,6 @@ const ApiService = {
     }
   },
 
-  // Get user data
   getUserData: async (username) => {
     try {
       const response = await fetch(`${API_BASE_URL}/user_data?username=${username}`);
@@ -112,7 +107,6 @@ const ApiService = {
     }
   },
 
-  // get historical stock data for a specific timeframe
   getHistoricalData: async (symbol, from, to, timespan = 'day') => {
     try {
       const response = await fetch(
@@ -131,7 +125,6 @@ const ApiService = {
     }
   },
 
-  // stock details 
   getStockDetails: async (symbol) => {
     try {
       const response = await fetch(
@@ -150,7 +143,6 @@ const ApiService = {
     }
   },
 
-  // save to MongoDB
   saveAnalysisResults: async (username, symbol, analysisResults) => {
     try {
       const response = await fetch(`${API_BASE_URL}/saveAnalysis`, {
