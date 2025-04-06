@@ -53,6 +53,24 @@ const EnhancedStockApp = () => {
     'TSLA', 'NVDA', 'JPM', 'V', 'WMT'
   ];
 
+  // Frequency options
+  const frequencyOptions = [
+    'every_5_minutes',
+    'every_30_minutes',
+    'hourly',
+    'daily',
+    'weekly'
+  ];
+  
+  // Display names for frequency options
+  const frequencyDisplayNames = {
+    'every_5_minutes': 'Every 5 Minutes',
+    'every_30_minutes': 'Every 30 Minutes',
+    'hourly': 'Hourly',
+    'daily': 'Daily',
+    'weekly': 'Weekly'
+  };
+
   // Use an effect to load stock details when portfolio changes
   useEffect(() => {
     if (portfolio.length > 0 && isAuthenticated) {
@@ -489,44 +507,119 @@ const EnhancedStockApp = () => {
         body: JSON.stringify({ stock: stockSymbol })
       });
       const data = await response.json();
-      //aggregates returned
-      let all_articles = []
+      console.log(data);
       
-      const cnnval = data['cnn']; 
-      for (const item of cnnval) {
-        all_articles.push(item); 
+      // Check if the data has the expected structure
+      if (data.success && data.results) {
+        // Group articles by source
+        const articlesBySource = {
+          'CNN': { articles: [], sentiment: 'Neutral', summary: '' },
+          'The Guardian': { articles: [], sentiment: 'Neutral', summary: '' },
+          'Fox News': { articles: [], sentiment: 'Neutral', summary: '' }
+        };
+        
+        // Process CNN articles
+        if (data.results.cnn && data.results.cnn.length > 0) {
+          const cnnArticles = data.results.cnn || [];
+          cnnArticles.forEach(article => {
+            articlesBySource['CNN'].articles.push({
+              title: article.title,
+              summary: article.first_paragraph
+            });
+          });
+          
+          // Set sentiment for CNN if available
+          if (data.results.individual_predictions && data.results.individual_predictions.cnn) {
+            articlesBySource['CNN'].sentiment = data.results.individual_predictions.cnn[1] || 'Neutral';
+            articlesBySource['CNN'].summary = data.results.individual_predictions.cnn[0] || '';
+          }
+        }
+        
+        // Process Guardian articles
+        if (data.results.guardian && data.results.guardian.length > 0) {
+          const guardianArticles = data.results.guardian || [];
+          guardianArticles.forEach(article => {
+            articlesBySource['The Guardian'].articles.push({
+              title: article.title,
+              summary: article.first_paragraph
+            });
+          });
+          
+          // Set sentiment for Guardian if available
+          if (data.results.individual_predictions && data.results.individual_predictions.guardian) {
+            articlesBySource['The Guardian'].sentiment = data.results.individual_predictions.guardian[1] || 'Neutral';
+            articlesBySource['The Guardian'].summary = data.results.individual_predictions.guardian[0] || '';
+          }
+        }
+        
+        // Process Fox News articles
+        if (data.results.fox && data.results.fox.length > 0) {
+          const foxArticles = data.results.fox || [];
+          foxArticles.forEach(article => {
+            articlesBySource['Fox News'].articles.push({
+              title: article.title,
+              summary: article.first_paragraph
+            });
+          });
+          
+          // Set sentiment for Fox if available
+          if (data.results.individual_predictions && data.results.individual_predictions.fox) {
+            articlesBySource['Fox News'].sentiment = data.results.individual_predictions.fox[1] || 'Neutral';
+            articlesBySource['Fox News'].summary = data.results.individual_predictions.fox[0] || '';
+          }
+        }
+        
+        // Filter out sources with no articles
+        const sourcesWithArticles = Object.entries(articlesBySource)
+          .filter(([_, sourceData]) => sourceData.articles.length > 0)
+          .map(([source, sourceData]) => ({
+            source,
+            sentiment: sourceData.sentiment,
+            articles: sourceData.articles,
+            summary: sourceData.summary
+          }));
+        
+        // Use the data from your backend in the analysis
+        setAnalysisResults({
+          stock: stockSymbol,
+          sourceGroups: sourcesWithArticles.length > 0 ? sourcesWithArticles : [
+            { 
+              source: 'All news sources', 
+              sentiment: 'Neutral', 
+              articles: [{ title: 'No relevant articles found' }],
+              summary: "No articles available for analysis" 
+            }
+          ],
+          sentiment: data.results.final_prediction?.[1] || 'Neutral',
+          summary: data.results.final_prediction?.[0] || "No prediction data available"
+        });
+      } else {
+        // Handle unexpected data structure
+        setAnalysisResults({
+          stock: stockSymbol,
+          sourceGroups: [{ 
+            source: 'All news sources', 
+            sentiment: 'Neutral', 
+            articles: [{ title: 'No relevant articles found' }],
+            summary: "No articles available for analysis" 
+          }],
+          sentiment: 'Neutral',
+          summary: "No prediction data available from the server"
+        });
       }
-
-      const guardianval = data['guardian']; 
-      for (const item of guardianval) {
-        all_articles.push(item); 
-      }
-
-      const foxval = data['fox']; 
-      for (const item of foxval) {
-        all_articles.push(item); 
-      }
-
-      // Use the data from your backend in the analysis
-      setAnalysisResults({
-        stock: stockSymbol,
-        articles: all_articles || [
-          { title: 'No relevant articles found', source: 'All news sources', sentiment: 'Neutral', summary: "N/A" },
-        ],
-        sentiment: data.final_prediction[1] || 'Neutral',
-        summary: data.final_prediction[0] || "N/A"
-      });
     } catch (error) {
       console.error("Error fetching data:", error);
       // Fallback to default data if API fails
       setAnalysisResults({
         stock: stockSymbol,
         sentiment: 'Neutral',
-        prediction: 'No prediction available',
-        articles: [
-          { title: 'No relevant articles found', source: 'All news sources', sentiment: 'Neutral', summary: "N/A" },
-        ],
-        summary: "N/A"
+        sourceGroups: [{ 
+          source: 'All news sources', 
+          sentiment: 'Neutral', 
+          articles: [{ title: 'No relevant articles found' }],
+          summary: "No articles available for analysis" 
+        }],
+        summary: "No prediction available due to service unavailability."
       });
     } finally {
       setIsAnalyzing(false);
@@ -936,7 +1029,7 @@ const EnhancedStockApp = () => {
             <p className="form-description">How often would you like to receive stock updates and predictions?</p>
             
             <div className="frequency-options">
-              {['daily', 'weekly', 'bi-weekly', 'monthly'].map(option => (
+              {frequencyOptions.map(option => (
                 <label key={option} className="frequency-option">
                   <input
                     type="radio"
@@ -946,7 +1039,7 @@ const EnhancedStockApp = () => {
                     onChange={handleChange}
                     className="radio-input"
                   />
-                  <span className="option-text">{option.charAt(0).toUpperCase() + option.slice(1)}</span>
+                  <span className="option-text">{frequencyDisplayNames[option]}</span>
                 </label>
               ))}
             </div>
@@ -1066,8 +1159,11 @@ const EnhancedStockApp = () => {
                   <span className="company-name"> | {stockDetails.name}</span>
                 )}
               </h3>
-              <div className={`prediction-badge ${analysisResults.sentiment}`}>
-                {analysisResults.prediction}
+              {console.log("Sentiment value:", analysisResults.sentiment, "Type:", typeof analysisResults.sentiment)}
+              <div className={`prediction-badge ${analysisResults.sentiment === 'negative' ? 'negative' : analysisResults.sentiment === 'positive' ? 'positive' : 'neutral'}`}>
+                {analysisResults.sentiment === 'positive' ? 'Upward Trend Expected' : 
+                 analysisResults.sentiment === 'negative' ? 'Downward Trend Expected' : 
+                 'Neutral Outlook'}
               </div>
             </div>
             
@@ -1159,19 +1255,29 @@ const EnhancedStockApp = () => {
                 News Article Analysis
               </h4>
               <div className="articles-list">
-                {analysisResults.articles?.map((article, index) => (
-                  <div key={index} className={`article-item ${article.sentiment.toLowerCase()}`}>
-                    <div className="article-title">{article.title}</div>
-                    <div className="article-source">{article.source}</div>
-                    <div className="article-sentiment">{article.sentiment}</div>
-                    <div className="article-summary">{article.summary}</div>
+                {analysisResults.sourceGroups?.map((sourceGroup, index) => (
+                  <div key={index} className={`article-item ${sourceGroup.sentiment?.toLowerCase()}`}>
+                    <div className="article-source-name">{sourceGroup.source}</div>
+                    <div className="article-sentiment">{sourceGroup.sentiment}</div>
+                    <div className="article-summary">{sourceGroup.summary}</div>
+                    <div className="article-links">
+                      {sourceGroup.articles.map((article, articleIndex) => (
+                        <div key={articleIndex} className="article-link">
+                          <a href="#" onClick={(e) => { e.preventDefault(); }}>{article.title}</a>
+                        </div>
+                      ))}
+                    </div>
                   </div>
                 ))}
               </div>
             </div>
             
             <div className="prediction-summary">
-              {analysisResults.summary}
+              <h4 className="section-subtitle">
+                <TrendingUp size={16} />
+                Prediction Summary
+              </h4>
+              <p>{analysisResults.summary}</p>
             </div>
             
             <div className="analysis-actions">
