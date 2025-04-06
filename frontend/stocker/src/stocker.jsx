@@ -252,6 +252,11 @@ const EnhancedStockApp = () => {
           }));
         
         // Create the analysis results with timestamp
+        const finalSentiment = data.results.final_prediction && data.results.final_prediction[1] ? 
+                              data.results.final_prediction[1] : 'Neutral';
+        
+        console.log("Setting sentiment from final_prediction:", finalSentiment);
+        
         const analysisResults = {
           stock: stockSymbol,
           sourceGroups: sourcesWithArticles.length > 0 ? sourcesWithArticles : [
@@ -262,8 +267,9 @@ const EnhancedStockApp = () => {
               summary: "No articles available for analysis" 
             }
           ],
-          sentiment: data.results.final_prediction?.[1] || 'Neutral',
-          summary: data.results.final_prediction?.[0] || "No prediction data available",
+          sentiment: finalSentiment,
+          summary: data.results.final_prediction && data.results.final_prediction[0] ? 
+                   data.results.final_prediction[0] : "No prediction data available",
           lastUpdated: new Date().toISOString(),
           isAnalyzed: true
         };
@@ -296,8 +302,10 @@ const EnhancedStockApp = () => {
             articles: [{ title: 'No relevant articles found' }],
             summary: "No articles available for analysis" 
           }],
-          sentiment: 'Neutral',
-          summary: "No prediction data available from the server",
+          sentiment: data.results && data.results.final_prediction && data.results.final_prediction[1] ? 
+                    data.results.final_prediction[1] : 'Neutral',
+          summary: data.results && data.results.final_prediction && data.results.final_prediction[0] ? 
+                   data.results.final_prediction[0] : "No prediction data available from the server",
           lastUpdated: new Date().toISOString(),
           isAnalyzed: true
         };
@@ -1574,9 +1582,11 @@ const EnhancedStockApp = () => {
               </h3>
               {analysisResults.isAnalyzed && console.log("Sentiment value:", analysisResults.sentiment, "Type:", typeof analysisResults.sentiment)}
               {analysisResults.isAnalyzed && (
-                <div className={`market-trend-badge ${analysisResults.sentiment === 'negative' ? 'negative' : analysisResults.sentiment === 'positive' ? 'positive' : 'neutral'}`}>
-                  {analysisResults.sentiment === 'positive' ? 'Potential Upward Trend' : 
-                   analysisResults.sentiment === 'negative' ? 'Potential Downward Trend' : 
+                <div className={`market-trend-badge ${analysisResults.sentiment?.toLowerCase() === 'negative' ? 'negative' : 
+                                                    analysisResults.sentiment?.toLowerCase() === 'positive' ? 'positive' : 
+                                                    'neutral'}`}>
+                  {analysisResults.sentiment?.toLowerCase() === 'positive' ? 'Potential Upward Trend' : 
+                   analysisResults.sentiment?.toLowerCase() === 'negative' ? 'Potential Downward Trend' : 
                    'Neutral Market Signals'}
                 </div>
               )}
