@@ -481,8 +481,7 @@ const EnhancedStockApp = () => {
       // Fetch historical data for the stock
       await fetchHistoricalData(stockSymbol, chartTimeframe);
       
-      // Call your FastAPI backend
-      const response = await fetch('http://localhost:8000/api/data', {
+      const response = await fetch('http://localhost:8000/api/predict', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -490,34 +489,44 @@ const EnhancedStockApp = () => {
         body: JSON.stringify({ stock: stockSymbol })
       });
       const data = await response.json();
+      //aggregates returned
+      let all_articles = []
       
+      const cnnval = data['cnn']; 
+      for (const item of cnnval) {
+        all_articles.push(item); 
+      }
+
+      const guardianval = data['guardian']; 
+      for (const item of guardianval) {
+        all_articles.push(item); 
+      }
+
+      const foxval = data['fox']; 
+      for (const item of foxval) {
+        all_articles.push(item); 
+      }
+
       // Use the data from your backend in the analysis
       setAnalysisResults({
         stock: stockSymbol,
-        externalFactors: data.externalFactors || ['Quarterly earnings report', 'New product launch', 'Industry regulation changes'],
-        sentiment: data.sentiment || 'positive',
-        prediction: data.prediction || 'Upward trend expected',
-        articles: data.articles || [
-          { title: 'Company Exceeds Quarterly Expectations', source: 'Financial Times', sentiment: 'Positive', summary: "Article Summary" },
-          { title: 'New Product Line Announced', source: 'Tech Insider', sentiment: 'Positive', summary: "Article Summary" },
-          { title: 'Market Analysis Shows Potential Risks', source: 'Market Watch', sentiment: 'Neutral', summary: "Article Summary" }
+        articles: all_articles || [
+          { title: 'No relevant articles found', source: 'All news sources', sentiment: 'Neutral', summary: "N/A" },
         ],
-        summary: data.summary || "Based on recent performance and market trends, this stock shows positive indicators for growth in the coming period. Analyst sentiment is generally favorable."
+        sentiment: data.final_prediction[1] || 'Neutral',
+        summary: data.final_prediction[0] || "N/A"
       });
     } catch (error) {
       console.error("Error fetching data:", error);
       // Fallback to default data if API fails
       setAnalysisResults({
         stock: stockSymbol,
-        externalFactors: ['Quarterly earnings report', 'New product launch', 'Industry regulation changes'],
-        sentiment: 'positive',
-        prediction: 'Upward trend expected',
+        sentiment: 'Neutral',
+        prediction: 'No prediction available',
         articles: [
-          { title: 'Company Exceeds Quarterly Expectations', source: 'Financial Times', sentiment: 'Positive', summary: "Article Summary" },
-          { title: 'New Product Line Announced', source: 'Tech Insider', sentiment: 'Positive', summary: "Article Summary" },
-          { title: 'Market Analysis Shows Potential Risks', source: 'Market Watch', sentiment: 'Neutral', summary: "Article Summary" }
+          { title: 'No relevant articles found', source: 'All news sources', sentiment: 'Neutral', summary: "N/A" },
         ],
-        summary: "Based on recent performance and market trends, this stock shows positive indicators for growth in the coming period. Analyst sentiment is generally favorable."
+        summary: "N/A"
       });
     } finally {
       setIsAnalyzing(false);
@@ -1143,19 +1152,7 @@ const EnhancedStockApp = () => {
                 )}
               </div>
             </div>
-            
-            <div className="analysis-section">
-              <h4 className="section-subtitle">
-                <Search size={16} />
-                External Factors
-              </h4>
-              <ul className="factors-list">
-                {analysisResults.externalFactors?.map((factor, index) => (
-                  <li key={index}>{factor}</li>
-                ))}
-              </ul>
-            </div>
-            
+                        
             <div className="analysis-section">
               <h4 className="section-subtitle">
                 <FileText size={16} />
