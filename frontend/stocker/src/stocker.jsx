@@ -1,7 +1,12 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { AlertCircle, CheckCircle, Eye, EyeOff, TrendingUp, FileText, Search, Briefcase } from 'lucide-react';
 import './stocker.css';
 import ApiService from './ApiService';
+import { Line } from 'react-chartjs-2';
+import { Chart as ChartJS, CategoryScale, LinearScale, PointElement, LineElement, Title, Tooltip, Legend } from 'chart.js';
+
+// Register Chart.js components
+ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, Title, Tooltip, Legend);
 
 const EnhancedStockApp = () => {
   // Authentication states
@@ -31,6 +36,15 @@ const EnhancedStockApp = () => {
   const [analysisResults, setAnalysisResults] = useState({});
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [selectedStock, setSelectedStock] = useState(null);
+  const [portfolioDetails, setPortfolioDetails] = useState({}); // Store details for all portfolio stocks
+  
+  // Stock verification and historical data states
+  const [isVerifyingStock, setIsVerifyingStock] = useState(false);
+  const [stockVerificationResult, setStockVerificationResult] = useState(null);
+  const [historicalData, setHistoricalData] = useState([]);
+  const [chartTimeframe, setChartTimeframe] = useState('1W'); // 1W, 1M, 6M, 1Y
+  const [isLoadingChart, setIsLoadingChart] = useState(false);
+  const [stockDetails, setStockDetails] = useState(null); // Store company name and other details
 
   // Popular stocks for quick selection
   const popularStocks = [
@@ -65,17 +79,59 @@ const EnhancedStockApp = () => {
   };
 
   // Add custom stock
-  const addCustomStock = () => {
+  const addCustomStock = async () => {
     if (!formData.customStock) return;
     
     const stockSymbol = formData.customStock.toUpperCase().trim();
     
     if (!formData.stocks.includes(stockSymbol)) {
-      setFormData({
-        ...formData,
-        stocks: [...formData.stocks, stockSymbol],
-        customStock: ''
+      // Verify the stock exists using Polygon API
+      setIsVerifyingStock(true);
+      
+      try {
+        const verificationResult = await ApiService.verifyStockSymbol(stockSymbol);
+        
+        if (verificationResult.valid) {
+          setFormData({
+            ...formData,
+            stocks: [...formData.stocks, stockSymbol],
+            customStock: ''
+          });
+          
+          setStockVerificationResult({
+            success: true,
+            message: `${stockSymbol} (${verificationResult.name}) added successfully.`,
+            stockInfo: verificationResult
+          });
+        } else {
+          setStockVerificationResult({
+            success: false,
+            message: `${stockSymbol} could not be verified as a valid stock symbol.`
+          });
+        }
+      } catch (error) {
+        console.error("Error verifying stock:", error);
+        setStockVerificationResult({
+          success: false,
+          message: "Error occurred while verifying the stock symbol."
+        });
+      } finally {
+        setIsVerifyingStock(false);
+        // Clear verification result after 3 seconds
+        setTimeout(() => {
+          setStockVerificationResult(null);
+        }, 3000);
+      }
+    } else {
+      setStockVerificationResult({
+        success: false,
+        message: `${stockSymbol} is already in your portfolio.`
       });
+      
+      // Clear verification result after 3 seconds
+      setTimeout(() => {
+        setStockVerificationResult(null);
+      }, 3000);
     }
   };
 
@@ -143,11 +199,15 @@ const EnhancedStockApp = () => {
             setCurrentUser(result.user);
             
             // Update portfolio and frequency
-            setPortfolio(result.user.stocks || []);
+            const userStocks = result.user.stocks || [];
+            setPortfolio(userStocks);
             setFormData(prev => ({
               ...prev,
               frequency: result.user.frequency || 'daily'
             }));
+            
+            // Fetch details for all stocks in the portfolio
+            await fetchPortfolioDetails(userStocks);
             
             setIsAuthenticated(true);
           } else {
@@ -232,6 +292,9 @@ const EnhancedStockApp = () => {
           frequency: formData.frequency
         });
         
+        // Fetch details for all stocks
+        await fetchPortfolioDetails(formData.stocks);
+        
         // Hide portfolio form
         setShowPortfolioForm(false);
         // Reset to step 1 for next time
@@ -264,16 +327,34 @@ const EnhancedStockApp = () => {
   const analyzeStock = async (stock) => {
     setSelectedStock(stock);
     setIsAnalyzing(true);
+    setHistoricalData([]); // Clear previous data
+    setStockDetails(null); // Clear previous stock details
     
     try {
+      // Fetch stock details to get company name
+      try {
+        const stockInfo = await ApiService.verifyStockSymbol(stock);
+        if (stockInfo.valid) {
+          setStockDetails({
+            symbol: stock,
+            name: stockInfo.name || stock,
+            market: stockInfo.market
+          });
+        }
+      } catch (detailsError) {
+        console.error("Error fetching stock details:", detailsError);
+      }
+      
+      // Fetch historical data for the stock
+      await fetchHistoricalData(stock, chartTimeframe);
+      
       // Call your FastAPI backend
-      // CHANGE WITH API 
       const response = await fetch('http://localhost:8000/api/data', {
-        method: 'POST', // Change to POST since you're sending data
+        method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ stock: stock }) // Pass the stock as JSON in the request body
+        body: JSON.stringify({ stock: stock })
       });
       const data = await response.json();
       
@@ -310,6 +391,59 @@ const EnhancedStockApp = () => {
     }
   };
 
+  // Fetch historical stock data based on timeframe
+  const fetchHistoricalData = async (symbol, timeframe) => {
+    setIsLoadingChart(true);
+    setHistoricalData([]); // Clear previous data
+    
+    try {
+      // Calculate date range based on timeframe
+      const endDate = new Date();
+      let startDate = new Date();
+      
+      switch(timeframe) {
+        case '1W':
+          startDate.setDate(endDate.getDate() - 7);
+          break;
+        case '1M':
+          startDate.setMonth(endDate.getMonth() - 1);
+          break;
+        case '6M':
+          startDate.setMonth(endDate.getMonth() - 6);
+          break;
+        case '1Y':
+          startDate.setFullYear(endDate.getFullYear() - 1);
+          break;
+        default:
+          startDate.setDate(endDate.getDate() - 7); // Default to 1W
+      }
+      
+      // Format dates for API
+      const formatDate = (date) => {
+        return date.toISOString().split('T')[0];
+      };
+      
+      const from = formatDate(startDate);
+      const to = formatDate(endDate);
+      
+      // Fetch data from Polygon API via your service
+      const data = await ApiService.getHistoricalData(symbol, from, to);
+      
+      // Only update if we got data back
+      if (data && data.length > 0) {
+        setHistoricalData(data);
+      } else {
+        console.warn(`No data returned for ${symbol} from ${from} to ${to}`);
+        setHistoricalData([]); // Set empty array to clearly indicate no data
+      }
+    } catch (error) {
+      console.error("Error fetching historical data:", error);
+      setHistoricalData([]);
+    } finally {
+      setIsLoadingChart(false);
+    }
+  };
+
   // Reset form to start again
   const resetForm = () => {
     setFormData({
@@ -325,6 +459,25 @@ const EnhancedStockApp = () => {
     setAnalysisResults({});
     setSelectedStock(null);
     setShowPortfolioForm(false);
+  };
+  
+  // Determine chart color based on price trend (green for up, red for down)
+  const determineChartColor = (data) => {
+    if (!data || data.length < 2) return 'rgb(75, 192, 192)'; // Default teal if not enough data
+    
+    const firstPrice = data[0].c; // First closing price
+    const lastPrice = data[data.length - 1].c; // Last closing price
+    
+    return lastPrice >= firstPrice ? 'rgb(34, 197, 94)' : 'rgb(239, 68, 68)'; // Green if up or equal, red if down
+  };
+  
+  // Add opacity to a color string
+  const addOpacity = (colorString, opacity) => {
+    if (colorString.startsWith('rgb(')) {
+      const rgbValues = colorString.match(/\d+/g);
+      return `rgba(${rgbValues[0]}, ${rgbValues[1]}, ${rgbValues[2]}, ${opacity})`;
+    }
+    return colorString; // Return original if not rgb format
   };
 
   // Render error message component
@@ -492,10 +645,15 @@ const EnhancedStockApp = () => {
         {portfolio.length > 0 && !showPortfolioForm ? (
           <>
             <div className="stocks-list">
-              {portfolio.map(stock => (
+              {[...portfolio].sort().map(stock => (
                 <div key={stock} className="portfolio-stock-item">
                   <div className="stock-info">
                     <span className="stock-symbol">{stock}</span>
+                    {portfolioDetails[stock] && 
+                     portfolioDetails[stock].name && 
+                     portfolioDetails[stock].name !== stock && (
+                      <span className="stock-company-name"> | {portfolioDetails[stock].name}</span>
+                    )}
                   </div>
                   <button 
                     className="analyze-button"
@@ -565,22 +723,30 @@ const EnhancedStockApp = () => {
                   onChange={handleChange}
                   className="text-input custom-stock-input"
                   placeholder="Enter stock symbol"
+                  disabled={isVerifyingStock}
                 />
                 <button
                   type="button"
                   onClick={addCustomStock}
                   className="add-button"
+                  disabled={isVerifyingStock || !formData.customStock}
                 >
-                  Add
+                  {isVerifyingStock ? 'Verifying...' : 'Add'}
                 </button>
               </div>
+              
+              {stockVerificationResult && (
+                <div className={`verification-message ${stockVerificationResult.success ? 'success' : 'error'}`}>
+                  {stockVerificationResult.message}
+                </div>
+              )}
             </div>
             
             {formData.stocks.length > 0 && (
               <div className="form-field">
                 <label className="field-label">Selected Stocks</label>
                 <div className="selected-stocks-container">
-                  {formData.stocks.map(stock => (
+                  {[...formData.stocks].sort().map(stock => (
                     <div key={stock} className="selected-stock">
                       {stock}
                       <button 
@@ -684,13 +850,18 @@ const EnhancedStockApp = () => {
             <p>Select a stock from your portfolio to analyze.</p>
             {portfolio.length > 0 && (
               <div className="quick-select-stocks">
-                {portfolio.map(stock => (
+                {[...portfolio].sort().map(stock => (
                   <button
                     key={stock}
-                    className="stock-button"
+                    className="stock-button analysis-stock-button"
                     onClick={() => analyzeStock(stock)}
                   >
-                    {stock}
+                    <span className="stock-button-symbol">{stock}</span>
+                    {portfolioDetails[stock] && 
+                     portfolioDetails[stock].name && 
+                     portfolioDetails[stock].name !== stock && (
+                      <span className="stock-button-company"> | {portfolioDetails[stock].name}</span>
+                    )}
                   </button>
                 ))}
               </div>
@@ -714,9 +885,96 @@ const EnhancedStockApp = () => {
         ) : (
           <div className="analysis-results">
             <div className="stock-header">
-              <h3>{selectedStock}</h3>
+              <h3>
+                {selectedStock}
+                {stockDetails && stockDetails.name && stockDetails.name !== selectedStock && (
+                  <span className="company-name"> | {stockDetails.name}</span>
+                )}
+              </h3>
               <div className={`prediction-badge ${analysisResults.sentiment}`}>
                 {analysisResults.prediction}
+              </div>
+            </div>
+            
+            {/* Historical Stock Chart */}
+            <div className="stock-chart-section">
+              <h4 className="section-subtitle">Historical Performance</h4>
+              
+              <div className="chart-timeframe-controls">
+                {['1W', '1M', '6M', '1Y'].map(timeframe => (
+                  <button
+                    key={timeframe}
+                    className={`timeframe-button ${chartTimeframe === timeframe ? 'active' : ''}`}
+                    onClick={() => {
+                      setChartTimeframe(timeframe);
+                      fetchHistoricalData(selectedStock, timeframe);
+                    }}
+                    disabled={isLoadingChart}
+                  >
+                    {timeframe}
+                  </button>
+                ))}
+              </div>
+              
+              <div className="chart-container">
+                {isLoadingChart ? (
+                  <div className="loading-chart">
+                    <div className="loading-spinner"></div>
+                    <p>Loading chart data...</p>
+                  </div>
+                ) : historicalData.length > 0 ? (
+                  <Line
+                    data={{
+                      labels: historicalData.map(dataPoint => {
+                        // Convert timestamp to date string (assuming timestamp is in milliseconds)
+                        const date = new Date(dataPoint.t);
+                        return date.toLocaleDateString();
+                      }),
+                      datasets: [
+                        {
+                          label: ' ', // Empty label 
+                          data: historicalData.map(dataPoint => dataPoint.c), // Closing price
+                          borderColor: determineChartColor(historicalData),
+                          backgroundColor: addOpacity(determineChartColor(historicalData), 0.2),
+                          tension: 0.1,
+                          fill: true
+                        }
+                      ]
+                    }}
+                    options={{
+                      responsive: true,
+                      maintainAspectRatio: false,
+                      plugins: {
+                        legend: {
+                          display: false, // Hide legend since we only have one dataset
+                        },
+                        title: {
+                          display: true,
+                          text: `${selectedStock}${stockDetails?.name && stockDetails.name !== selectedStock ? ` | ${stockDetails.name}` : ''} - ${chartTimeframe} Historical Price`
+                        }
+                      },
+                      scales: {
+                        y: {
+                          beginAtZero: false,
+                          title: {
+                            display: true,
+                            text: 'Price ($)'
+                          }
+                        },
+                        x: {
+                          title: {
+                            display: true,
+                            text: 'Date'
+                          }
+                        }
+                      }
+                    }}
+                  />
+                ) : (
+                  <div className="no-chart-data">
+                    <p>No historical data available for this timeframe.</p>
+                  </div>
+                )}
               </div>
             </div>
             
@@ -759,6 +1017,7 @@ const EnhancedStockApp = () => {
                 onClick={() => {
                   setSelectedStock(null);
                   setAnalysisResults({});
+                  setHistoricalData([]);
                 }}
               >
                 Analyze Another Stock
@@ -768,6 +1027,30 @@ const EnhancedStockApp = () => {
         )}
       </div>
     );
+  };
+
+  // Fetch details for all stocks in portfolio
+  const fetchPortfolioDetails = async (stocks) => {
+    const details = {};
+    
+    for (const stock of stocks) {
+      try {
+        const stockInfo = await ApiService.verifyStockSymbol(stock);
+        if (stockInfo.valid) {
+          details[stock] = {
+            symbol: stock,
+            name: stockInfo.name || stock,
+            market: stockInfo.market
+          };
+        }
+      } catch (error) {
+        console.error(`Error fetching details for ${stock}:`, error);
+        // Add a fallback entry with just the symbol
+        details[stock] = { symbol: stock, name: stock };
+      }
+    }
+    
+    setPortfolioDetails(details);
   };
 
   return isAuthenticated ? renderMainApp() : renderAuthForm();

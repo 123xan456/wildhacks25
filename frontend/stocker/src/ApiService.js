@@ -1,6 +1,10 @@
 // Base URL for API calls
 const API_BASE_URL = 'http://localhost:8000/api';
 
+// Polygon API configuration 
+const POLYGON_API_BASE_URL = 'https://api.polygon.io';
+const POLYGON_API_KEY = 'MFsJ1WFJwpgpR9BXzJ24byShrdlVdp6a'; // REPLACE LATER
+
 // API Service object
 const ApiService = {
   // Test API connection
@@ -89,6 +93,66 @@ const ApiService = {
       return await response.json();
     } catch (error) {
       console.error('Get user data error:', error);
+      throw error;
+    }
+  },
+
+  // Verify if a stock symbol exists using Polygon API
+  verifyStockSymbol: async (symbol) => {
+    try {
+      const response = await fetch(`${POLYGON_API_BASE_URL}/v3/reference/tickers/${symbol}?apiKey=${POLYGON_API_KEY}`);
+      
+      if (!response.ok) {
+        return { valid: false };
+      }
+      
+      const data = await response.json();
+      return { 
+        valid: true, 
+        name: data.results?.name || symbol,
+        market: data.results?.market || 'Unknown'
+      };
+    } catch (error) {
+      console.error('Stock verification error:', error);
+      return { valid: false };
+    }
+  },
+
+  // Get historical stock data for a specific timeframe
+  getHistoricalData: async (symbol, from, to, timespan = 'day') => {
+    try {
+      // Format: YYYY-MM-DD
+      const response = await fetch(
+        `${POLYGON_API_BASE_URL}/v2/aggs/ticker/${symbol}/range/1/${timespan}/${from}/${to}?apiKey=${POLYGON_API_KEY}`
+      );
+      
+      if (!response.ok) {
+        throw new Error('Failed to fetch historical data');
+      }
+      
+      const data = await response.json();
+      return data.results || [];
+    } catch (error) {
+      console.error('Historical data error:', error);
+      throw error;
+    }
+  },
+
+  // Get stock details and latest price
+  getStockDetails: async (symbol) => {
+    try {
+      const response = await fetch(
+        `${POLYGON_API_BASE_URL}/v2/aggs/ticker/${symbol}/prev?apiKey=${POLYGON_API_KEY}`
+      );
+      
+      if (!response.ok) {
+        throw new Error('Failed to fetch stock details');
+      }
+      
+      const data = await response.json();
+      return data.results?.[0] || null;
+    } catch (error) {
+      console.error('Stock details error:', error);
       throw error;
     }
   }

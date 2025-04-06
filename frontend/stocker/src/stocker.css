@@ -415,7 +415,12 @@
   
   /* Portfolio Styles */
   .portfolio-container {
-    padding: 1rem 0;
+    padding: 1rem;
+    max-width: 1000px;
+    margin: 0 auto;
+    background-color: white;
+    border-radius: 0.5rem;
+    box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
   }
   
   .section-title {
@@ -452,12 +457,20 @@
   .stock-info {
     display: flex;
     align-items: center;
+    flex-wrap: wrap;
   }
   
   .stock-symbol {
     font-weight: 600;
-    font-size: 1rem;
+    font-size: 1.125rem;
     color: #1f2937;
+  }
+  
+  .stock-company-name {
+    font-weight: 400;
+    color: #4b5563;
+    font-size: 0.875rem;
+    margin-left: 0.25rem;
   }
   
   .analyze-button {
@@ -479,7 +492,12 @@
   
   /* Analysis Styles */
   .analysis-container {
-    padding: 1rem 0;
+    padding: 1rem;
+    max-width: 1000px;
+    margin: 0 auto;
+    background-color: white;
+    border-radius: 0.5rem;
+    box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
   }
   
   .select-stock-prompt {
@@ -669,7 +687,9 @@
   .analysis-actions {
     display: flex;
     justify-content: flex-end;
-  }-out-button {
+  }
+  
+  .sign-out-button {
     background-color: transparent;
     color: #6b7280;
     border: 1px solid #d1d5db;
@@ -677,6 +697,10 @@
     border-radius: 0.375rem;
     cursor: pointer;
     font-size: 0.875rem;
+  }
+  
+  .sign-out-button:hover {
+    background-color: #f3f4f6;
   }
   
   body {
@@ -719,4 +743,83 @@
   
   h1, h2, h3, h4, p {
     margin-top: 0;
+  }
+  
+  /* Stock verification message */
+  .verification-message {
+    margin-top: 0.5rem;
+    padding: 0.5rem;
+    border-radius: 0.375rem;
+    font-size: 0.875rem;
+    animation: fadeIn 0.3s ease-in-out;
+  }
+  
+  .verification-message.success {
+    background-color: #dcfce7;
+    border: 1px solid #22c55e;
+    color: #166534;
+  }
+  
+  .verification-message.error {
+    background-color: #fee2e2;
+    border: 1px solid #ef4444;
+    color: #b91c1c;
+  }
+  
+  @keyframes fadeIn {
+    from { opacity: 0; }
+    to { opacity: 1; }
+  }
+  
+  /* Chart styles */
+  .stock-chart-section {
+    margin-bottom: 1.5rem;
+    padding: 1rem;
+    background-color: #f9fafb;
+    border-radius: 0.5rem;
+    border: 1px solid #e5e7eb;
+  }
+  
+  .chart-timeframe-controls {
+    display: flex;
+    gap: 0.5rem;
+    margin-bottom: 1rem;
+  }
+  
+  .timeframe-button {
+    padding: 0.25rem 0.5rem;
+    font-size: 0.875rem;
+    border: 1px solid #d1d5db;
+    border-radius: 0.25rem;
+    background-color: white;
+    color: #4b5563;
+    cursor: pointer;
+  }
+  
+  .timeframe-button:hover {
+    background-color: #f3f4f6;
+  }
+  
+  .timeframe-button.active {
+    background-color: #2563eb;
+    color: white;
+    border-color: #2563eb;
+  }
+  
+  .chart-container {
+    height: 300px;
+    margin-bottom: 1rem;
+    width: 100%;
+    position: relative;
+  }
+  
+  .no-chart-data {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    height: 300px;
+    width: 100%;
+    background-color: #f3f4f6;
+    border-radius: 0.375rem;
+    color: #6b7280;
   }
