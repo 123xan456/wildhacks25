@@ -23,7 +23,8 @@ const EnhancedStockApp = () => {
     username: '',
     password: '',
     confirmPassword: '',
-    stocks: [],
+    stocks: [], // Will store simple stock symbols during selection
+    fullNameStocks: {}, // Will map symbol to full name for later use
     customStock: '',
     frequency: 'daily'
   });
@@ -73,15 +74,61 @@ const EnhancedStockApp = () => {
   // Toggle stock selection
   const toggleStock = (stock) => {
     if (formData.stocks.includes(stock)) {
+      // Remove the stock
       setFormData({
         ...formData,
-        stocks: formData.stocks.filter(s => s !== stock)
+        stocks: formData.stocks.filter(s => s !== stock),
+        // Also remove from fullNameStocks if it exists
+        fullNameStocks: { 
+          ...formData.fullNameStocks,
+          [stock]: undefined 
+        }
       });
     } else {
-      setFormData({
-        ...formData,
-        stocks: [...formData.stocks, stock]
-      });
+      // Add the stock - verify and get company name
+      setIsVerifyingStock(true);
+      
+      ApiService.verifyStockSymbol(stock)
+        .then(result => {
+          if (result.valid) {
+            const fullNameFormat = result.name !== stock ? 
+              `${stock} | ${result.name}` : stock;
+            
+            setFormData(prev => ({
+              ...prev,
+              stocks: [...prev.stocks, stock], // Add simple symbol for selection UI
+              fullNameStocks: {
+                ...prev.fullNameStocks,
+                [stock]: fullNameFormat // Store the full display format for later use
+              }
+            }));
+            
+            setStockVerificationResult({
+              success: true,
+              message: `${stock} (${result.name}) added successfully.`,
+              stockInfo: result
+            });
+          } else {
+            setStockVerificationResult({
+              success: false,
+              message: `${stock} could not be verified as a valid stock symbol.`
+            });
+          }
+        })
+        .catch(error => {
+          console.error("Error verifying stock:", error);
+          setStockVerificationResult({
+            success: false,
+            message: "Error occurred while verifying the stock symbol."
+          });
+        })
+        .finally(() => {
+          setIsVerifyingStock(false);
+          // Clear verification result after 3 seconds
+          setTimeout(() => {
+            setStockVerificationResult(null);
+          }, 3000);
+        });
     }
   };
 
@@ -99,9 +146,17 @@ const EnhancedStockApp = () => {
         const verificationResult = await ApiService.verifyStockSymbol(stockSymbol);
         
         if (verificationResult.valid) {
+          // Create the full display format
+          const fullNameFormat = verificationResult.name !== stockSymbol ? 
+            `${stockSymbol} | ${verificationResult.name}` : stockSymbol;
+          
           setFormData({
             ...formData,
-            stocks: [...formData.stocks, stockSymbol],
+            stocks: [...formData.stocks, stockSymbol], // Add simple symbol for UI
+            fullNameStocks: {
+              ...formData.fullNameStocks,
+              [stockSymbol]: fullNameFormat // Store full format for later use
+            },
             customStock: ''
           });
           
@@ -192,7 +247,7 @@ const EnhancedStockApp = () => {
             // Simulate the account created effect before redirection
             setTimeout(() => {
               setIsAuthenticated(true);
-              setPortfolio([]);
+              setPortfolio([]); // Empty portfolio for new users
             }, 2000);
           } else {
             setErrors({ username: result.message || 'Error creating account' });
@@ -205,16 +260,33 @@ const EnhancedStockApp = () => {
             // Set user info
             setCurrentUser(result.user);
             
-            // Update portfolio and frequency
-            const userStocks = result.user.stocks || [];
-            setPortfolio(userStocks);
+            // Get the stocks from the backend (should already be in full name format)
+            const dbStocks = result.user.stocks || [];
+            
+            // Convert the stocks from MongoDB to our object format with symbol and fullName
+            const portfolioData = dbStocks.map(stockText => {
+              if (stockText.includes(' | ')) {
+                // It's already in the combined format
+                const [symbol, companyName] = stockText.split(' | ');
+                return {
+                  symbol,
+                  fullName: stockText
+                };
+              } else {
+                // Legacy data that only has the symbol
+                return {
+                  symbol: stockText,
+                  fullName: stockText
+                };
+              }
+            });
+            
+            setPortfolio(portfolioData);
+            
             setFormData(prev => ({
               ...prev,
               frequency: result.user.frequency || 'daily'
             }));
-            
-            // Fetch details for all stocks in the portfolio
-            await fetchPortfolioDetails(userStocks);
             
             setIsAuthenticated(true);
           } else {
@@ -276,14 +348,16 @@ const EnhancedStockApp = () => {
     
     setIsLoading(true);
     try {
-      // Get list of stocks that were added and removed
-      const previousStocks = new Set(portfolio);
-      const newStocks = new Set(formData.stocks);
+      // Create array of full display names for MongoDB
+      const stocksWithNames = formData.stocks.map(symbol => {
+        // Use full name format if available, otherwise just the symbol
+        return formData.fullNameStocks[symbol] || symbol;
+      });
       
-      // Save stocks to MongoDB
+      // Save stocks with full names to MongoDB
       const stocksResult = await ApiService.updateStocks(
         currentUser.username,
-        formData.stocks
+        stocksWithNames
       );
       
       // Save frequency preferences to MongoDB
@@ -293,18 +367,21 @@ const EnhancedStockApp = () => {
       );
       
       if (stocksResult.success && frequencyResult.success) {
-        // Update local portfolio state
-        setPortfolio(formData.stocks);
+        // Create portfolio with full display names
+        const portfolioWithNames = formData.stocks.map(symbol => {
+          const fullName = formData.fullNameStocks[symbol];
+          return { symbol, fullName: fullName || symbol };
+        });
+        
+        // Update local portfolio state with the combined data
+        setPortfolio(portfolioWithNames);
         
         // Update the current user data
         setCurrentUser({
           ...currentUser,
-          stocks: formData.stocks,
+          stocks: stocksWithNames, // Now we store full names in the backend
           frequency: formData.frequency
         });
-        
-        // Fetch details for all stocks, including previous ones in case we're re-adding them
-        await fetchPortfolioDetails(formData.stocks);
         
         // Hide portfolio form
         setShowPortfolioForm(false);
@@ -322,12 +399,25 @@ const EnhancedStockApp = () => {
 
   // Edit portfolio - show the portfolio form with current stocks
   const editPortfolio = () => {
-    // Use the current user's stocks if available
-    const stocks = currentUser && currentUser.stocks ? currentUser.stocks : portfolio;
+    // Extract symbols and create fullNameStocks mapping from current portfolio
+    const symbols = [];
+    const fullNameMap = {};
+    
+    portfolio.forEach(item => {
+      if (typeof item === 'string') {
+        symbols.push(item);
+      } else {
+        symbols.push(item.symbol);
+        if (item.fullName) {
+          fullNameMap[item.symbol] = item.fullName;
+        }
+      }
+    });
     
     setFormData({
-      ...formData, 
-      stocks: stocks,
+      ...formData,
+      stocks: symbols,
+      fullNameStocks: fullNameMap,
       frequency: currentUser?.frequency || 'daily'
     });
     setShowPortfolioForm(true);
@@ -335,29 +425,61 @@ const EnhancedStockApp = () => {
   };
 
   // Handle analysis for a specific stock
-  const analyzeStock = async (stock) => {
-    setSelectedStock(stock);
+  const analyzeStock = async (stockSymbol) => {
+    setSelectedStock(stockSymbol);
     setIsAnalyzing(true);
     setHistoricalData([]); // Clear previous data
-    setStockDetails(null); // Clear previous stock details
     
-    try {
-      // Fetch stock details to get company name
+    // Find the stock details from portfolio if available
+    const stockItem = portfolio.find(item => 
+      (typeof item === 'string' ? item : item.symbol) === stockSymbol
+    );
+    
+    // If we have a full name, use it directly instead of making another API call
+    if (stockItem && typeof stockItem !== 'string' && stockItem.fullName) {
+      if (stockItem.fullName.includes(' | ')) {
+        const [symbol, companyName] = stockItem.fullName.split(' | ');
+        setStockDetails({
+          symbol: stockSymbol,
+          name: companyName
+        });
+      } else {
+        // Just set the symbol if no company name is available
+        setStockDetails({
+          symbol: stockSymbol,
+          name: stockSymbol
+        });
+      }
+    } else {
+      // If we don't have the company name, fetch it
       try {
-        const stockInfo = await ApiService.verifyStockSymbol(stock);
+        const stockInfo = await ApiService.verifyStockSymbol(stockSymbol);
         if (stockInfo.valid) {
           setStockDetails({
-            symbol: stock,
-            name: stockInfo.name || stock,
+            symbol: stockSymbol,
+            name: stockInfo.name || stockSymbol,
             market: stockInfo.market
+          });
+        } else {
+          // If verification fails, just use the symbol
+          setStockDetails({
+            symbol: stockSymbol,
+            name: stockSymbol
           });
         }
       } catch (detailsError) {
         console.error("Error fetching stock details:", detailsError);
+        // Use symbol as fallback
+        setStockDetails({
+          symbol: stockSymbol,
+          name: stockSymbol
+        });
       }
-      
+    }
+    
+    try {
       // Fetch historical data for the stock
-      await fetchHistoricalData(stock, chartTimeframe);
+      await fetchHistoricalData(stockSymbol, chartTimeframe);
       
       // Call your FastAPI backend
       const response = await fetch('http://localhost:8000/api/data', {
@@ -365,13 +487,13 @@ const EnhancedStockApp = () => {
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ stock: stock })
+        body: JSON.stringify({ stock: stockSymbol })
       });
       const data = await response.json();
       
       // Use the data from your backend in the analysis
       setAnalysisResults({
-        stock,
+        stock: stockSymbol,
         externalFactors: data.externalFactors || ['Quarterly earnings report', 'New product launch', 'Industry regulation changes'],
         sentiment: data.sentiment || 'positive',
         prediction: data.prediction || 'Upward trend expected',
@@ -386,7 +508,7 @@ const EnhancedStockApp = () => {
       console.error("Error fetching data:", error);
       // Fallback to default data if API fails
       setAnalysisResults({
-        stock,
+        stock: stockSymbol,
         externalFactors: ['Quarterly earnings report', 'New product launch', 'Industry regulation changes'],
         sentiment: 'positive',
         prediction: 'Upward trend expected',
@@ -462,6 +584,7 @@ const EnhancedStockApp = () => {
       password: '',
       confirmPassword: '',
       stocks: [],
+      fullNameStocks: {},
       customStock: '',
       frequency: 'daily'
     });
@@ -656,29 +779,36 @@ const EnhancedStockApp = () => {
         {portfolio.length > 0 && !showPortfolioForm ? (
           <>
             <div className="stocks-list">
-              {[...portfolio].sort().map(stock => (
-                <div key={stock} className="portfolio-stock-item">
-                  <div className="stock-info">
-                    <span className="stock-symbol">{stock}</span>
-                    {portfolioDetails[stock]?.name && 
-                     portfolioDetails[stock].name !== stock ? (
-                      <span className="stock-company-name"> | {portfolioDetails[stock].name}</span>
-                    ) : portfolioDetails[stock] ? null : (
-                      <span className="loading-company-name"> | Loading...</span>
-                    )}
+              {[...portfolio].sort((a, b) => {
+                // Sort by symbol if dealing with objects
+                const symbolA = typeof a === 'string' ? a : a.symbol;
+                const symbolB = typeof b === 'string' ? b : b.symbol;
+                return symbolA.localeCompare(symbolB);
+              }).map(stock => {
+                // Extract symbol and display name
+                const symbol = typeof stock === 'string' ? stock : stock.symbol;
+                const displayName = typeof stock === 'string' ? 
+                  stock : 
+                  (stock.fullName || symbol);
+                
+                return (
+                  <div key={symbol} className="portfolio-stock-item">
+                    <div className="stock-info">
+                      <span className="stock-name">{displayName}</span>
+                    </div>
+                    <button 
+                      className="analyze-button"
+                      onClick={() => {
+                        setActiveTab('analysis');
+                        analyzeStock(symbol);
+                      }}
+                    >
+                      <TrendingUp size={16} />
+                      <span>Analyze</span>
+                    </button>
                   </div>
-                  <button 
-                    className="analyze-button"
-                    onClick={() => {
-                      setActiveTab('analysis');
-                      analyzeStock(stock);
-                    }}
-                  >
-                    <TrendingUp size={16} />
-                    <span>Analyze</span>
-                  </button>
-                </div>
-              ))}
+                );
+              })}
             </div>
             
             <button
@@ -758,18 +888,31 @@ const EnhancedStockApp = () => {
               <div className="form-field">
                 <label className="field-label">Selected Stocks</label>
                 <div className="selected-stocks-container">
-                  {[...formData.stocks].sort().map(stock => (
-                    <div key={stock} className="selected-stock">
-                      {stock}
-                      <button 
-                        type="button" 
-                        onClick={() => toggleStock(stock)}
-                        className="remove-stock"
-                      >
-                        ×
-                      </button>
-                    </div>
-                  ))}
+                  {[...formData.stocks].sort((a, b) => {
+                    // Sort by symbol if dealing with objects
+                    const symbolA = typeof a === 'string' ? a : a.symbol;
+                    const symbolB = typeof b === 'string' ? b : b.symbol;
+                    return symbolA.localeCompare(symbolB);
+                  }).map(stock => {
+                    // Extract symbol for key and display
+                    const symbol = typeof stock === 'string' ? stock : stock.symbol;
+                    const displayText = typeof stock === 'string' ? 
+                      stock : 
+                      (stock.symbol); // Just show symbol in the chips for cleaner UI
+                    
+                    return (
+                      <div key={symbol} className="selected-stock">
+                        {displayText}
+                        <button 
+                          type="button" 
+                          onClick={() => toggleStock(stock)}
+                          className="remove-stock"
+                        >
+                          ×
+                        </button>
+                      </div>
+                    );
+                  })}
                 </div>
               </div>
             )}
@@ -862,19 +1005,31 @@ const EnhancedStockApp = () => {
             <p>Select a stock from your portfolio to analyze.</p>
             {portfolio.length > 0 && (
               <div className="quick-select-stocks">
-                {[...portfolio].sort().map(stock => (
-                  <button
-                    key={stock}
-                    className="stock-button analysis-stock-button"
-                    onClick={() => analyzeStock(stock)}
-                  >
-                    <span className="stock-button-symbol">{stock}</span>
-                    {portfolioDetails[stock]?.name && 
-                     portfolioDetails[stock].name !== stock ? (
-                      <span className="stock-button-company"> | {portfolioDetails[stock].name}</span>
-                    ) : null}
-                  </button>
-                ))}
+                {[...portfolio].sort((a, b) => {
+                  // Sort by symbol
+                  const symbolA = typeof a === 'string' ? a : a.symbol;
+                  const symbolB = typeof b === 'string' ? b : b.symbol;
+                  return symbolA.localeCompare(symbolB);
+                }).map(stock => {
+                  // Extract symbol and display name
+                  const symbol = typeof stock === 'string' ? stock : stock.symbol;
+                  const displayName = typeof stock === 'string' ? 
+                    stock : 
+                    (stock.fullName || symbol);
+                  
+                  return (
+                    <button
+                      key={symbol}
+                      className="stock-button analysis-stock-button"
+                      onClick={() => analyzeStock(symbol)}
+                    >
+                      <span className="stock-button-symbol">{symbol}</span>
+                      {displayName !== symbol && displayName.includes(' | ') && (
+                        <span className="stock-button-company">{displayName.split(' | ')[1]}</span>
+                      )}
+                    </button>
+                  );
+                })}
               </div>
             )}
             
